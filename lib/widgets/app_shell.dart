@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../screens/analytics_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/schedule_screen.dart';
+import '../screens/settings_screen.dart';
 import '../screens/subjects_screen.dart';
 import '../screens/tasks_screen.dart';
 import '../state/app_state.dart';
@@ -21,7 +22,7 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
-    final screens = const [
+    const screens = [
       DashboardScreen(),
       SubjectsScreen(),
       TasksScreen(),
@@ -40,24 +41,19 @@ class AppShell extends StatelessWidget {
                 Expanded(
                   child: Column(
                     children: [
-                      _TopBar(desktop: desktop),
+                      _TopBar(desktop: desktop, state: state),
                       Expanded(
                         child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 280),
+                          duration: const Duration(milliseconds: 260),
                           switchInCurve: Curves.easeOutCubic,
                           switchOutCurve: Curves.easeInCubic,
-                          transitionBuilder: (child, animation) {
-                            return FadeTransition(
-                              opacity: animation,
-                              child: SlideTransition(
-                                position: Tween(
-                                  begin: const Offset(.02, 0),
-                                  end: Offset.zero,
-                                ).animate(animation),
-                                child: child,
-                              ),
-                            );
-                          },
+                          transitionBuilder: (child, animation) => FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: Tween(begin: const Offset(.018, 0), end: Offset.zero).animate(animation),
+                              child: child,
+                            ),
+                          ),
                           child: KeyedSubtree(
                             key: ValueKey(state.currentIndex),
                             child: screens[state.currentIndex],
@@ -77,10 +73,7 @@ class AppShell extends StatelessWidget {
                   onDestinationSelected: state.setIndex,
                   destinations: [
                     for (final d in destinations)
-                      NavigationDestination(
-                        icon: Icon(d.$1),
-                        label: d.$2 == 'Visão geral' ? 'Início' : d.$2,
-                      ),
+                      NavigationDestination(icon: Icon(d.$1), label: d.$2 == 'Visão geral' ? 'Início' : d.$2),
                   ],
                 ),
         );
@@ -97,100 +90,92 @@ class _DesktopNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      width: 248,
+      width: 244,
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 18),
       decoration: BoxDecoration(
         color: dark ? const Color(0xFF0B2832) : Colors.white,
-        border: Border(
-          right: BorderSide(
-            color: dark
-                ? Colors.white.withValues(alpha: .06)
-                : Colors.black.withValues(alpha: .06),
-          ),
-        ),
+        border: Border(right: BorderSide(color: dark ? Colors.white.withValues(alpha: .06) : Colors.black.withValues(alpha: .06))),
       ),
       child: Column(
         children: [
           const Row(
             children: [
               _Logo(),
-              SizedBox(width: 12),
+              SizedBox(width: 11),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Academia Flow',
-                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-                    Text('Academic OS', style: TextStyle(fontSize: 11)),
+                    Text('Academia Flow', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                    Text('Academic OS', style: TextStyle(fontSize: 10)),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 28),
           for (var i = 0; i < AppShell.destinations.length; i++)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: _NavButton(
-                selected: state.currentIndex == i,
-                icon: AppShell.destinations[i].$1,
-                label: AppShell.destinations[i].$2,
-                badge: i == 2 ? state.pendingCount : null,
-                onTap: () => state.setIndex(i),
+              child: Material(
+                color: state.currentIndex == i ? Theme.of(context).colorScheme.primary.withValues(alpha: .10) : Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  onTap: () => state.setIndex(i),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+                    child: Row(
+                      children: [
+                        Icon(AppShell.destinations[i].$1, size: 21, color: state.currentIndex == i ? Theme.of(context).colorScheme.primary : null),
+                        const SizedBox(width: 11),
+                        Expanded(child: Text(AppShell.destinations[i].$2, style: TextStyle(fontWeight: state.currentIndex == i ? FontWeight.w900 : FontWeight.w600))),
+                        if (i == 2 && state.pendingCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(20)),
+                            child: Text('${state.pendingCount}', style: const TextStyle(color: AppColors.petroleumDark, fontSize: 9, fontWeight: FontWeight.w900)),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           const Spacer(),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.gold.withValues(alpha: .08),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.gold.withValues(alpha: .18)),
+          if (state.semester.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: AppColors.gold.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: AppColors.gold.withValues(alpha: .16)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('SEMESTRE', style: TextStyle(color: AppColors.gold, fontSize: 9, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 4),
+                  Text(state.semester, style: const TextStyle(fontWeight: FontWeight.w900)),
+                ],
+              ),
             ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text('Semestre 2026.2',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
-                    ),
-                    Text('42%',
-                        style: TextStyle(
-                            color: AppColors.gold, fontWeight: FontWeight.w900)),
-                  ],
-                ),
-                SizedBox(height: 10),
-                LinearProgressIndicator(
-                  value: .42,
-                  minHeight: 7,
-                  borderRadius: BorderRadius.all(Radius.circular(20)),
-                  color: AppColors.gold,
-                ),
-                SizedBox(height: 8),
-                Text('8 semanas restantes', style: TextStyle(fontSize: 11)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Row(
+          Row(
             children: [
               CircleAvatar(
                 radius: 18,
                 backgroundColor: AppColors.petroleum,
-                child: Text('VA',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                child: Text(_initials(state.userName), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)),
               ),
-              SizedBox(width: 10),
+              const SizedBox(width: 9),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Victor Alexandre',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-                    Text('ADS • 2º período', style: TextStyle(fontSize: 10)),
+                    Text(state.userName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                    Text(state.period.isEmpty ? state.course : '${state.course} • ${state.period}', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 9)),
                   ],
                 ),
               ),
@@ -202,112 +187,34 @@ class _DesktopNav extends StatelessWidget {
   }
 }
 
-class _NavButton extends StatelessWidget {
-  const _NavButton({
-    required this.selected,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.badge,
-  });
-  final bool selected;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final int? badge;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? Theme.of(context).colorScheme.primary.withValues(alpha: .10)
-          : Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-          child: Row(
-            children: [
-              Icon(icon,
-                  size: 21,
-                  color: selected ? Theme.of(context).colorScheme.primary : null),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                  ),
-                ),
-              ),
-              if (badge != null && badge! > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.gold,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '$badge',
-                    style: const TextStyle(
-                      color: AppColors.petroleumDark,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.desktop});
+  const _TopBar({required this.desktop, required this.state});
   final bool desktop;
+  final AppState state;
 
   @override
   Widget build(BuildContext context) {
-    final state = AppStateScope.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(desktop ? 26 : 18, 16, desktop ? 26 : 18, 8),
+      padding: EdgeInsets.fromLTRB(desktop ? 26 : 17, 14, desktop ? 26 : 17, 7),
       child: Row(
         children: [
           if (!desktop) ...[
             const _Logo(),
-            const SizedBox(width: 10),
-            const Text('Academia Flow',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+            const SizedBox(width: 9),
+            const Text('Academia Flow', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
           ] else
             const Spacer(),
           if (!desktop) const Spacer(),
           IconButton.filledTonal(
             tooltip: 'Alternar tema',
             onPressed: state.toggleTheme,
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 240),
-              child: Icon(
-                state.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                key: ValueKey(state.isDark),
-              ),
-            ),
+            icon: Icon(state.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 7),
           IconButton.filledTonal(
-            tooltip: 'Notificações',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Você tem 3 lembretes acadêmicos próximos.')),
-              );
-            },
-            icon: const Badge(
-              smallSize: 8,
-              child: Icon(Icons.notifications_none_rounded),
-            ),
+            tooltip: 'Configurações',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
+            icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
@@ -321,24 +228,20 @@ class _Logo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 42,
-      height: 42,
+      width: 41,
+      height: 41,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.petroleum, Color(0xFF17697A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: const LinearGradient(colors: [AppColors.petroleum, Color(0xFF17697A)], begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(13),
-        boxShadow: [
-          BoxShadow(
-            blurRadius: 16,
-            color: AppColors.petroleum.withValues(alpha: .18),
-          ),
-        ],
       ),
-      alignment: Alignment.center,
-      child: const Icon(Icons.school_rounded, color: AppColors.gold, size: 23),
+      child: const Icon(Icons.school_rounded, color: AppColors.gold, size: 22),
     );
   }
+}
+
+String _initials(String name) {
+  final parts = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+  if (parts.isEmpty) return 'AF';
+  if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+  return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
 }

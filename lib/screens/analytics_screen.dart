@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
-import '../data/demo_data.dart';
+import '../models/models.dart';
+import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/forms.dart';
 
 class AnalyticsScreen extends StatelessWidget {
   const AnalyticsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
+    final risk = state.subjects.where(state.isSubjectAtRisk).toList();
+    final overall = state.overallAverage;
+    final attendance = state.averageAttendance;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
       child: Center(
@@ -16,63 +23,61 @@ class AnalyticsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Desempenho',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -1,
-                      )),
-              const SizedBox(height: 5),
-              Text('Indicadores acadêmicos e pontos de atenção.',
-                  style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 20),
-              LayoutBuilder(
-                builder: (context, c) {
-                  final wide = c.maxWidth >= 780;
-                  final cards = [
-                    const _KpiCard(label: 'CR estimado', value: '8,24', trend: '+0,18', icon: Icons.workspace_premium_rounded),
-                    const _KpiCard(label: 'Frequência média', value: '89,8%', trend: '+2,1%', icon: Icons.fact_check_rounded),
-                    _KpiCard(label: 'Riscos acadêmicos', value: '${subjects.where((s) => s.grade < 7 || s.attendance < 80).length}', trend: 'requer atenção', icon: Icons.warning_amber_rounded, danger: true),
-                  ];
-                  if (wide) {
-                    return Row(children: [
-                      for (var i = 0; i < cards.length; i++) ...[
-                        Expanded(child: cards[i]),
-                        if (i < cards.length - 1) const SizedBox(width: 12),
-                      ]
-                    ]);
-                  }
-                  return Column(children: [
-                    for (var i = 0; i < cards.length; i++) ...[
-                      cards[i],
-                      if (i < cards.length - 1) const SizedBox(height: 10),
-                    ]
-                  ]);
-                },
-              ),
+              const PageHeader(title: 'Desempenho', subtitle: 'Médias, frequência e indicadores calculados com seus dados reais.'),
               const SizedBox(height: 18),
-              LayoutBuilder(
-                builder: (context, c) {
-                  if (c.maxWidth >= 850) {
-                    return const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 3, child: _SubjectBars()),
-                        SizedBox(width: 14),
-                        Expanded(flex: 2, child: _GradeHistory()),
+              if (state.subjects.isEmpty)
+                EmptyState(
+                  icon: Icons.analytics_outlined,
+                  title: 'Ainda não há dados para analisar',
+                  message: 'Cadastre suas matérias e notas. Os indicadores aparecerão automaticamente conforme você usar o app.',
+                  actionLabel: 'Cadastrar matéria',
+                  onAction: () => showSubjectEditor(context, state),
+                )
+              else ...[
+                LayoutBuilder(
+                  builder: (context, c) {
+                    final cards = [
+                      _Kpi(label: 'Média geral', value: overall?.toStringAsFixed(2) ?? '—', caption: overall == null ? 'Sem notas ainda' : 'Limite: ${state.minGrade.toStringAsFixed(1)}', icon: Icons.workspace_premium_rounded, color: AppColors.gold),
+                      _Kpi(label: 'Frequência média', value: attendance == null ? '—' : '${attendance.toStringAsFixed(1)}%', caption: 'Mínimo: ${state.minAttendance.toStringAsFixed(0)}%', icon: Icons.fact_check_outlined, color: AppColors.success),
+                      _Kpi(label: 'Matérias em risco', value: '${risk.length}', caption: risk.isEmpty ? 'Nenhum alerta atual' : 'Requer atenção', icon: Icons.warning_amber_rounded, color: risk.isEmpty ? AppColors.success : AppColors.danger),
+                    ];
+                    if (c.maxWidth >= 780) {
+                      return Row(children: [
+                        for (var i = 0; i < cards.length; i++) ...[
+                          Expanded(child: cards[i]),
+                          if (i < cards.length - 1) const SizedBox(width: 11),
+                        ],
+                      ]);
+                    }
+                    return Column(children: [
+                      for (var i = 0; i < cards.length; i++) ...[
+                        cards[i],
+                        if (i < cards.length - 1) const SizedBox(height: 9),
                       ],
-                    );
-                  }
-                  return const Column(
-                    children: [
-                      _SubjectBars(),
-                      SizedBox(height: 14),
-                      _GradeHistory(),
-                    ],
-                  );
-                },
-              ),
-              const SizedBox(height: 14),
-              const _RiskPanel(),
+                    ]);
+                  },
+                ),
+                const SizedBox(height: 15),
+                LayoutBuilder(
+                  builder: (context, c) {
+                    final performance = _SubjectPerformance(state: state);
+                    final history = _GradeHistory(state: state);
+                    if (c.maxWidth >= 850) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 3, child: performance),
+                          const SizedBox(width: 13),
+                          Expanded(flex: 2, child: history),
+                        ],
+                      );
+                    }
+                    return Column(children: [performance, const SizedBox(height: 13), history]);
+                  },
+                ),
+                const SizedBox(height: 13),
+                _RiskPanel(state: state, risk: risk),
+              ],
             ],
           ),
         ),
@@ -81,50 +86,40 @@ class AnalyticsScreen extends StatelessWidget {
   }
 }
 
-class _KpiCard extends StatelessWidget {
-  const _KpiCard({
-    required this.label,
-    required this.value,
-    required this.trend,
-    required this.icon,
-    this.danger = false,
-  });
+class _Kpi extends StatelessWidget {
+  const _Kpi({required this.label, required this.value, required this.caption, required this.icon, required this.color});
   final String label;
   final String value;
-  final String trend;
+  final String caption;
   final IconData icon;
-  final bool danger;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AppColors.danger : AppColors.gold;
     return SoftCard(
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 23,
-            backgroundColor: color.withValues(alpha: .11),
-            child: Icon(icon, color: color),
-          ),
-          const SizedBox(width: 13),
+          CircleAvatar(radius: 22, backgroundColor: color.withValues(alpha: .11), child: Icon(icon, color: color)),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label, style: Theme.of(context).textTheme.bodySmall),
-                Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 23)),
-                Text(trend, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w700)),
+                Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                Text(caption, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w700)),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
   }
 }
 
-class _SubjectBars extends StatelessWidget {
-  const _SubjectBars();
+class _SubjectPerformance extends StatelessWidget {
+  const _SubjectPerformance({required this.state});
+  final AppState state;
 
   @override
   Widget build(BuildContext context) {
@@ -133,33 +128,34 @@ class _SubjectBars extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SectionTitle('Desempenho por matéria'),
-          const SizedBox(height: 18),
-          for (final s in subjects) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: Text(s.name,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(width: 10),
-                Text(s.grade.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.w900)),
-              ],
+          const SizedBox(height: 16),
+          for (final subject in state.subjects) ...[
+            Builder(
+              builder: (context) {
+                final avg = state.averageForSubject(subject.id!);
+                final risk = avg != null && avg < state.minGrade;
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(subject.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800))),
+                        const SizedBox(width: 8),
+                        Text(avg == null ? '—' : avg.toStringAsFixed(1), style: TextStyle(fontWeight: FontWeight.w900, color: risk ? AppColors.danger : null)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(
+                      value: avg == null ? 0 : (avg / 10).clamp(0.0, 1.0).toDouble(),
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(20),
+                      color: risk ? AppColors.danger : Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(height: 13),
+                  ],
+                );
+              },
             ),
-            const SizedBox(height: 7),
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: s.grade / 10),
-              duration: const Duration(milliseconds: 800),
-              curve: Curves.easeOutCubic,
-              builder: (_, value, __) => LinearProgressIndicator(
-                value: value,
-                minHeight: 9,
-                color: s.grade < 7 ? AppColors.danger : s.color,
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-            const SizedBox(height: 15),
-          ]
+          ],
         ],
       ),
     );
@@ -167,60 +163,48 @@ class _SubjectBars extends StatelessWidget {
 }
 
 class _GradeHistory extends StatelessWidget {
-  const _GradeHistory();
+  const _GradeHistory({required this.state});
+  final AppState state;
 
   @override
   Widget build(BuildContext context) {
-    const values = [7.2, 7.9, 8.1, 7.8, 8.5, 8.9];
+    final items = [...state.grades]..sort((a, b) => b.date.compareTo(a.date));
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionTitle('Histórico de notas'),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 210,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (var i = 0; i < values.length; i++)
+          const SectionTitle('Notas recentes'),
+          const SizedBox(height: 12),
+          if (items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 25),
+              child: Center(child: Text('Nenhuma nota cadastrada.', style: Theme.of(context).textTheme.bodySmall)),
+            )
+          else
+            for (final grade in items.take(6)) ...[
+              Row(
+                children: [
+                  Container(
+                    width: 43,
+                    height: 43,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: AppColors.gold.withValues(alpha: .10), borderRadius: BorderRadius.circular(12)),
+                    child: Text(grade.value.toStringAsFixed(1), style: const TextStyle(color: AppColors.gold, fontWeight: FontWeight.w900)),
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Text(values[i].toStringAsFixed(1),
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 5),
-                          TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0, end: values[i] / 10),
-                            duration: Duration(milliseconds: 550 + i * 90),
-                            curve: Curves.easeOutBack,
-                            builder: (_, v, __) => Container(
-                              height: 145 * v,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppColors.gold,
-                                    AppColors.gold.withValues(alpha: .45),
-                                  ],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                ),
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text('N${i + 1}', style: const TextStyle(fontSize: 10)),
-                        ],
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(grade.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        Text(state.subjectName(grade.subjectId), maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+                      ],
                     ),
                   ),
-              ],
-            ),
-          ),
+                ],
+              ),
+              const Divider(height: 18),
+            ],
         ],
       ),
     );
@@ -228,48 +212,51 @@ class _GradeHistory extends StatelessWidget {
 }
 
 class _RiskPanel extends StatelessWidget {
-  const _RiskPanel();
+  const _RiskPanel({required this.state, required this.risk});
+  final AppState state;
+  final List<Subject> risk;
 
   @override
   Widget build(BuildContext context) {
-    final risk = subjects.where((s) => s.grade < 7 || s.attendance < 80).toList();
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.health_and_safety_outlined, color: AppColors.danger),
-              SizedBox(width: 8),
-              Text('Indicador de risco', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+              Icon(risk.isEmpty ? Icons.verified_outlined : Icons.health_and_safety_outlined, color: risk.isEmpty ? AppColors.success : AppColors.danger),
+              const SizedBox(width: 8),
+              Text(risk.isEmpty ? 'Situação acadêmica saudável' : 'Indicador de risco', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
             ],
           ),
           const SizedBox(height: 6),
-          Text('Monitora automaticamente nota e frequência abaixo dos limites.',
-              style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 16),
-          for (final s in risk)
-            Container(
-              margin: const EdgeInsets.only(bottom: 9),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.danger.withValues(alpha: .08),
-                borderRadius: BorderRadius.circular(13),
-                border: Border.all(color: AppColors.danger.withValues(alpha: .16)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppColors.danger),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      '${s.name}: média ${s.grade.toStringAsFixed(1)} • frequência ${s.attendance}%',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+          Text(
+            risk.isEmpty
+                ? 'Nenhuma matéria está abaixo dos limites configurados de nota ou frequência.'
+                : 'Confira as disciplinas abaixo. O alerta considera média mínima ${state.minGrade.toStringAsFixed(1)} e frequência mínima ${state.minAttendance.toStringAsFixed(0)}%.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (risk.isNotEmpty) ...[
+            const SizedBox(height: 13),
+            for (final subject in risk)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(color: AppColors.danger.withValues(alpha: .07), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.danger.withValues(alpha: .14))),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 19),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        '${subject.name}: média ${state.averageForSubject(subject.id!)?.toStringAsFixed(1) ?? '—'} • frequência ${subject.attendance.toStringAsFixed(0)}%',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+          ],
         ],
       ),
     );

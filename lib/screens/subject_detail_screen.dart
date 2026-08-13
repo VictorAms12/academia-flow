@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
+import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/forms.dart';
 
 class SubjectDetailScreen extends StatefulWidget {
-  const SubjectDetailScreen({super.key, required this.subject});
-  final Subject subject;
+  const SubjectDetailScreen({super.key, required this.subjectId});
+  final int subjectId;
 
   @override
   State<SubjectDetailScreen> createState() => _SubjectDetailScreenState();
@@ -13,7 +15,6 @@ class SubjectDetailScreen extends StatefulWidget {
 
 class _SubjectDetailScreenState extends State<SubjectDetailScreen> with SingleTickerProviderStateMixin {
   late final TabController tabs;
-  final checks = [true, true, false, false];
 
   @override
   void initState() {
@@ -29,38 +30,50 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.subject;
+    final state = AppStateScope.of(context);
+    final subject = state.subjectById(widget.subjectId);
+    if (subject == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Matéria')),
+        body: const Center(child: Text('Esta matéria não existe mais.')),
+      );
+    }
+    final avg = state.averageForSubject(subject.id!);
     return Scaffold(
       appBar: AppBar(
-        title: Text(s.name, overflow: TextOverflow.ellipsis),
-        backgroundColor: Colors.transparent,
+        title: Text(subject.name, overflow: TextOverflow.ellipsis),
+        actions: [
+          IconButton(onPressed: () => showSubjectEditor(context, state, subject: subject), icon: const Icon(Icons.edit_outlined)),
+          const SizedBox(width: 6),
+        ],
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+            padding: const EdgeInsets.fromLTRB(16, 3, 16, 11),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1080),
                 child: SoftCard(
                   child: LayoutBuilder(
                     builder: (context, c) {
-                      final compact = c.maxWidth < 620;
+                      final compact = c.maxWidth < 650;
                       final identity = Row(
                         children: [
-                          CircleAvatar(
-                            radius: 27,
-                            backgroundColor: s.color.withValues(alpha: .14),
-                            child: Icon(s.icon, color: s.color),
+                          Container(
+                            width: 54,
+                            height: 54,
+                            decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: .10), borderRadius: BorderRadius.circular(16)),
+                            child: const Icon(Icons.auto_stories_rounded),
                           ),
-                          const SizedBox(width: 13),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(s.professor, style: const TextStyle(fontWeight: FontWeight.w800)),
-                                Text('${s.room} • Semestre 2026.2',
-                                    style: Theme.of(context).textTheme.bodySmall),
+                                Text(subject.professor.isEmpty ? 'Professor não informado' : subject.professor, style: const TextStyle(fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 3),
+                                Text(subject.room.isEmpty ? 'Local não informado' : subject.room, style: Theme.of(context).textTheme.bodySmall),
                               ],
                             ),
                           ),
@@ -69,14 +82,15 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> with SingleTi
                       final metrics = Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _miniMetric('Média', s.grade.toStringAsFixed(1)),
-                          const SizedBox(width: 18),
-                          _miniMetric('Frequência', '${s.attendance}%'),
+                          _Metric(label: 'Média', value: avg == null ? '—' : avg.toStringAsFixed(1)),
+                          const SizedBox(width: 22),
+                          _Metric(label: 'Frequência', value: '${subject.attendance.toStringAsFixed(0)}%'),
+                          const SizedBox(width: 22),
+                          _Metric(label: 'Faltas', value: '${subject.absences}'),
                         ],
                       );
                       return compact
-                          ? Column(
-                              children: [identity, const SizedBox(height: 16), Align(alignment: Alignment.centerLeft, child: metrics)])
+                          ? Column(children: [identity, const SizedBox(height: 15), Align(alignment: Alignment.centerLeft, child: metrics)])
                           : Row(children: [Expanded(child: identity), metrics]);
                     },
                   ),
@@ -94,13 +108,12 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> with SingleTi
                 tabs: const [
                   Tab(text: 'Aulas'),
                   Tab(text: 'Atividades & Provas'),
+                  Tab(text: 'Notas'),
                   Tab(text: 'Materiais'),
-                  Tab(text: 'Detalhes'),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 4),
           Expanded(
             child: Center(
               child: ConstrainedBox(
@@ -108,10 +121,10 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> with SingleTi
                 child: TabBarView(
                   controller: tabs,
                   children: [
-                    _AulasTab(subject: s),
-                    _ActivitiesTab(subject: s),
-                    const _MaterialsTab(),
-                    _DetailsTab(checks: checks, onChanged: (i, v) => setState(() => checks[i] = v)),
+                    _ClassesTab(state: state, subject: subject),
+                    _TasksTab(state: state, subject: subject),
+                    _GradesTab(state: state, subject: subject),
+                    _NotesTab(state: state, subject: subject),
                   ],
                 ),
               ),
@@ -121,231 +134,350 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> with SingleTi
       ),
     );
   }
-
-  Widget _miniMetric(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-        Text(label, style: const TextStyle(fontSize: 11)),
-      ],
-    );
-  }
 }
 
-class _AulasTab extends StatelessWidget {
-  const _AulasTab({required this.subject});
+class _Metric extends StatelessWidget {
+  const _Metric({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          Text(label, style: const TextStyle(fontSize: 10)),
+        ],
+      );
+}
+
+class _ClassesTab extends StatelessWidget {
+  const _ClassesTab({required this.state, required this.subject});
+  final AppState state;
   final Subject subject;
 
   @override
   Widget build(BuildContext context) {
-    final lessons = [
-      ('12 AGO', 'Introdução e fundamentos', 'Concluída'),
-      ('19 AGO', 'Estruturas e aplicação prática', 'Próxima'),
-      ('26 AGO', 'Laboratório guiado', 'Planejada'),
-      ('02 SET', 'Revisão e exercícios', 'Planejada'),
-    ];
+    final schedules = state.schedulesForSubject(subject.id!);
     return ListView(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       children: [
-        const SectionTitle('Cronograma de aulas'),
-        const SizedBox(height: 12),
-        for (var i = 0; i < lessons.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: SoftCard(
-              child: Row(
-                children: [
-                  Container(
-                    width: 58,
-                    height: 54,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: subject.color.withValues(alpha: .12),
-                      borderRadius: BorderRadius.circular(13),
+        SectionTitle(
+          'Rotina de aulas',
+          trailing: IconButton.filledTonal(onPressed: () => showScheduleEditor(context, state, presetSubjectId: subject.id), icon: const Icon(Icons.add_rounded)),
+        ),
+        const SizedBox(height: 11),
+        if (schedules.isEmpty)
+          EmptyState(
+            icon: Icons.schedule_rounded,
+            title: 'Nenhum horário cadastrado',
+            message: 'Adicione os dias e horários em que essa matéria acontece.',
+            actionLabel: 'Adicionar horário',
+            onAction: () => showScheduleEditor(context, state, presetSubjectId: subject.id),
+          )
+        else
+          for (final entry in schedules)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: SoftCard(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: .09), borderRadius: BorderRadius.circular(13)),
+                      child: Text(dayName(entry.day).substring(0, 3).toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
                     ),
-                    child: Text(lessons[i].$1,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
-                  ),
-                  const SizedBox(width: 13),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(lessons[i].$2, style: const TextStyle(fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 3),
-                        Text(lessons[i].$3, style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${entry.start} – ${entry.end}', style: const TextStyle(fontWeight: FontWeight.w900)),
+                          Text(entry.room.isEmpty ? 'Local não informado' : entry.room, style: Theme.of(context).textTheme.bodySmall),
+                        ],
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      onSelected: (value) async {
+                        if (value == 'edit') await showScheduleEditor(context, state, entry: entry);
+                        if (value == 'delete' && await confirmDelete(context, 'horário de ${dayName(entry.day)}')) await state.deleteSchedule(entry);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Editar')),
+                        PopupMenuItem(value: 'delete', child: Text('Excluir')),
                       ],
                     ),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.more_horiz_rounded),
-                  )
-                ],
+                  ],
+                ),
               ),
             ),
-          )
+        const SizedBox(height: 17),
+        const SectionTitle('Frequência'),
+        const SizedBox(height: 10),
+        SoftCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text('${subject.attendance.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900))),
+                  GoldBadge('${subject.absences} FALTA${subject.absences == 1 ? '' : 'S'}'),
+                ],
+              ),
+              const SizedBox(height: 9),
+              LinearProgressIndicator(value: subject.attendance / 100, minHeight: 8, borderRadius: BorderRadius.circular(20), color: subject.attendance < state.minAttendance ? AppColors.danger : AppColors.success),
+              const SizedBox(height: 9),
+              Text(
+                subject.totalClasses == 0
+                    ? 'Ainda não há aulas contabilizadas. Edite a matéria para informar aulas dadas e faltas.'
+                    : '${subject.totalClasses} aulas contabilizadas • mínimo configurado: ${state.minAttendance.toStringAsFixed(0)}%',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(onPressed: () => showSubjectEditor(context, state, subject: subject), icon: const Icon(Icons.edit_calendar_outlined), label: const Text('Atualizar aulas e faltas')),
+            ],
+          ),
+        ),
       ],
     );
   }
 }
 
-class _ActivitiesTab extends StatelessWidget {
-  const _ActivitiesTab({required this.subject});
+class _TasksTab extends StatelessWidget {
+  const _TasksTab({required this.state, required this.subject});
+  final AppState state;
   final Subject subject;
 
   @override
   Widget build(BuildContext context) {
+    final tasks = state.tasksForSubject(subject.id!);
     return ListView(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       children: [
-        const SectionTitle('Atividades e avaliações'),
-        const SizedBox(height: 12),
-        _activity(context, 'Trabalho prático I', 'Em andamento', '23 AGO', AppColors.gold),
-        const SizedBox(height: 10),
-        _activity(context, 'Lista de revisão', 'Pendente', '28 AGO', Theme.of(context).colorScheme.primary),
-        const SizedBox(height: 10),
-        _activity(context, 'Prova bimestral', 'Pendente', '05 SET', AppColors.danger),
-        const SizedBox(height: 10),
-        _activity(context, 'Exercícios iniciais', 'Entregue', '10 AGO', AppColors.success),
+        SectionTitle('Atividades & Provas', trailing: IconButton.filledTonal(onPressed: () => showTaskEditor(context, state, presetSubjectId: subject.id), icon: const Icon(Icons.add_rounded))),
+        const SizedBox(height: 11),
+        if (tasks.isEmpty)
+          EmptyState(
+            icon: Icons.assignment_outlined,
+            title: 'Nenhuma atividade nesta matéria',
+            message: 'Cadastre trabalhos, provas, listas e outros prazos relacionados à disciplina.',
+            actionLabel: 'Adicionar atividade',
+            onAction: () => showTaskEditor(context, state, presetSubjectId: subject.id),
+          )
+        else
+          for (final task in tasks)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: _SubjectTaskCard(state: state, task: task),
+            ),
       ],
     );
   }
+}
 
-  Widget _activity(BuildContext context, String title, String status, String date, Color color) {
+class _SubjectTaskCard extends StatelessWidget {
+  const _SubjectTaskCard({required this.state, required this.task});
+  final AppState state;
+  final AcademicTask task;
+
+  @override
+  Widget build(BuildContext context) {
     return SoftCard(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(width: 4, height: 48, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8))),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                Text(status, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w700)),
-              ],
-            ),
+          Row(
+            children: [
+              Expanded(child: Text(task.title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+              PopupMenuButton<String>(
+                onSelected: (value) async {
+                  if (value == 'edit') await showTaskEditor(context, state, task: task);
+                  if (value == 'delete' && await confirmDelete(context, task.title)) await state.deleteTask(task);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Editar')),
+                  PopupMenuItem(value: 'delete', child: Text('Excluir')),
+                ],
+              ),
+            ],
           ),
-          GoldBadge(date),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              GoldBadge(formatDate(task.dueDate)),
+              GoldBadge(task.status == TaskStatus.done ? 'CONCLUÍDO' : task.status == TaskStatus.doing ? 'EM ANDAMENTO' : 'A FAZER'),
+            ],
+          ),
+          if (task.description.isNotEmpty) ...[
+            const SizedBox(height: 11),
+            Text(task.description, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.45)),
+          ],
+          if (task.checklist.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 4),
+            for (var i = 0; i < task.checklist.length; i++)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: task.completedSteps.contains(i),
+                title: Text(task.checklist[i]),
+                controlAffinity: ListTileControlAffinity.leading,
+                onChanged: (_) => state.toggleTaskStep(task, i),
+              ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _MaterialsTab extends StatelessWidget {
-  const _MaterialsTab();
+class _GradesTab extends StatelessWidget {
+  const _GradesTab({required this.state, required this.subject});
+  final AppState state;
+  final Subject subject;
 
   @override
   Widget build(BuildContext context) {
-    final items = [
-      (Icons.picture_as_pdf_rounded, 'Slides — Unidade 01', 'PDF • 3,8 MB'),
-      (Icons.description_rounded, 'Resumo da aula 02', 'Anotação'),
-      (Icons.link_rounded, 'Playlist complementar', 'Link externo'),
-      (Icons.folder_zip_rounded, 'Exemplos práticos', 'ZIP • 1,2 MB'),
-    ];
+    final grades = state.gradesForSubject(subject.id!);
+    final avg = state.averageForSubject(subject.id!);
     return ListView(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       children: [
-        SectionTitle(
-          'Conteúdos & Materiais',
-          trailing: FilledButton.icon(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Upload simulado no protótipo.')),
-              );
-            },
-            icon: const Icon(Icons.upload_rounded, size: 18),
-            label: const Text('Adicionar'),
+        SectionTitle('Notas', trailing: IconButton.filledTonal(onPressed: () => showGradeEditor(context, state, presetSubjectId: subject.id), icon: const Icon(Icons.add_rounded))),
+        const SizedBox(height: 11),
+        SoftCard(
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(avg == null ? '—' : avg.toStringAsFixed(2), style: const TextStyle(fontSize: 31, fontWeight: FontWeight.w900)),
+                    Text('Média ponderada atual', style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+              Icon(avg != null && avg < state.minGrade ? Icons.warning_amber_rounded : Icons.workspace_premium_outlined, color: avg != null && avg < state.minGrade ? AppColors.danger : AppColors.gold, size: 32),
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        for (final item in items)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: SoftCard(
-              child: Row(
-                children: [
-                  CircleAvatar(child: Icon(item.$1)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.$2, style: const TextStyle(fontWeight: FontWeight.w800)),
-                        Text(item.$3, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 11),
+        if (grades.isEmpty)
+          EmptyState(
+            icon: Icons.grade_outlined,
+            title: 'Nenhuma nota cadastrada',
+            message: 'Adicione avaliações e seus pesos para calcular a média automaticamente.',
+            actionLabel: 'Adicionar nota',
+            onAction: () => showGradeEditor(context, state, presetSubjectId: subject.id),
+          )
+        else
+          for (final grade in grades)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: SoftCard(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: (grade.value < state.minGrade ? AppColors.danger : AppColors.gold).withValues(alpha: .10), borderRadius: BorderRadius.circular(13)),
+                      child: Text(grade.value.toStringAsFixed(1), style: TextStyle(fontWeight: FontWeight.w900, color: grade.value < state.minGrade ? AppColors.danger : AppColors.gold)),
+                    ),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(grade.title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                          Text('${formatDate(grade.date)} • peso ${grade.weight.toStringAsFixed(1)}', style: Theme.of(context).textTheme.bodySmall),
+                        ],
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      onSelected: (value) async {
+                        if (value == 'edit') await showGradeEditor(context, state, grade: grade);
+                        if (value == 'delete' && await confirmDelete(context, grade.title)) await state.deleteGrade(grade);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Editar')),
+                        PopupMenuItem(value: 'delete', child: Text('Excluir')),
                       ],
                     ),
-                  ),
-                  IconButton(onPressed: () {}, icon: const Icon(Icons.open_in_new_rounded)),
-                ],
+                  ],
+                ),
               ),
             ),
-          )
       ],
     );
   }
 }
 
-class _DetailsTab extends StatelessWidget {
-  const _DetailsTab({required this.checks, required this.onChanged});
-  final List<bool> checks;
-  final void Function(int, bool) onChanged;
+class _NotesTab extends StatelessWidget {
+  const _NotesTab({required this.state, required this.subject});
+  final AppState state;
+  final Subject subject;
 
   @override
   Widget build(BuildContext context) {
-    const steps = [
-      'Ler orientações e critérios',
-      'Definir escopo da solução',
-      'Implementar versão inicial',
-      'Revisar e enviar no ambiente virtual',
-    ];
+    final notes = state.notesForSubject(subject.id!);
     return ListView(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       children: [
-        const SectionTitle('Detalhes da atividade em foco'),
-        const SizedBox(height: 12),
-        const SoftCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              GoldBadge('TRABALHO PRÁTICO I'),
-              SizedBox(height: 12),
-              Text('Orientações', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-              SizedBox(height: 7),
-              Text(
-                'Desenvolva a solução proposta aplicando os conceitos vistos nas últimas aulas. '
-                'A entrega deve conter documentação curta, código organizado e evidências de funcionamento.',
-                style: TextStyle(height: 1.55),
-              ),
-              SizedBox(height: 16),
-              Text('Critérios de avaliação', style: TextStyle(fontWeight: FontWeight.w900)),
-              SizedBox(height: 8),
-              Text('• Correção técnica: 4,0\n• Organização e legibilidade: 2,0\n• Documentação: 2,0\n• Apresentação: 2,0'),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        SoftCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Checklist de execução', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-              const SizedBox(height: 8),
-              for (var i = 0; i < steps.length; i++)
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: checks[i],
-                  title: Text(steps[i]),
-                  controlAffinity: ListTileControlAffinity.leading,
-                  onChanged: (v) => onChanged(i, v ?? false),
+        SectionTitle('Materiais & Anotações', trailing: IconButton.filledTonal(onPressed: () => showNoteEditor(context, state, presetSubjectId: subject.id), icon: const Icon(Icons.add_rounded))),
+        const SizedBox(height: 11),
+        if (notes.isEmpty)
+          EmptyState(
+            icon: Icons.folder_copy_outlined,
+            title: 'Nenhum material salvo',
+            message: 'Guarde resumos, observações e links importantes relacionados à matéria.',
+            actionLabel: 'Adicionar material',
+            onAction: () => showNoteEditor(context, state, presetSubjectId: subject.id),
+          )
+        else
+          for (final note in notes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: SoftCard(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(child: Icon(note.link.isEmpty ? Icons.notes_rounded : Icons.link_rounded)),
+                    const SizedBox(width: 11),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(note.title, style: const TextStyle(fontWeight: FontWeight.w900)),
+                          if (note.content.isNotEmpty) ...[
+                            const SizedBox(height: 5),
+                            Text(note.content, maxLines: 4, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
+                          ],
+                          if (note.link.isNotEmpty) ...[
+                            const SizedBox(height: 5),
+                            SelectableText(note.link, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12)),
+                          ],
+                        ],
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      onSelected: (value) async {
+                        if (value == 'edit') await showNoteEditor(context, state, note: note);
+                        if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Editar')),
+                        PopupMenuItem(value: 'delete', child: Text('Excluir')),
+                      ],
+                    ),
+                  ],
                 ),
-            ],
-          ),
-        ),
+              ),
+            ),
       ],
     );
   }

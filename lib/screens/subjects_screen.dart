@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import '../data/demo_data.dart';
+import '../models/models.dart';
+import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/forms.dart';
 import 'subject_detail_screen.dart';
 
 class SubjectsScreen extends StatefulWidget {
@@ -16,9 +18,8 @@ class _SubjectsScreenState extends State<SubjectsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = subjects
-        .where((s) => s.name.toLowerCase().contains(search.toLowerCase()))
-        .toList();
+    final state = AppStateScope.of(context);
+    final filtered = state.subjects.where((s) => s.name.toLowerCase().contains(search.toLowerCase())).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
@@ -28,122 +29,154 @@ class _SubjectsScreenState extends State<SubjectsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Matérias',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -1,
-                      )),
-              const SizedBox(height: 5),
-              Text('Acompanhe aulas, notas, frequência e materiais.',
-                  style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 18),
-              TextField(
-                onChanged: (v) => setState(() => search = v),
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search_rounded),
-                  hintText: 'Buscar disciplina...',
+              PageHeader(
+                title: 'Matérias',
+                subtitle: 'Gerencie disciplinas, notas, faltas, tarefas e materiais.',
+                action: FilledButton.icon(
+                  onPressed: () => showSubjectEditor(context, state),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Adicionar'),
                 ),
               ),
-              const SizedBox(height: 18),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final cols = constraints.maxWidth >= 980 ? 3 : constraints.maxWidth >= 620 ? 2 : 1;
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filtered.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: cols,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: cols == 1 ? 1.85 : 1.15,
-                    ),
-                    itemBuilder: (_, i) {
-                      final subject = filtered[i];
-                      final risk = subject.grade < 7 || subject.attendance < 80;
-                      return SoftCard(
-                        onTap: () => Navigator.of(context).push(
-                          PageRouteBuilder(
-                            transitionDuration: const Duration(milliseconds: 320),
-                            pageBuilder: (_, animation, __) => FadeTransition(
-                              opacity: animation,
-                              child: SubjectDetailScreen(subject: subject),
-                            ),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: subject.color.withValues(alpha: .14),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: Icon(subject.icon, color: subject.color),
-                                ),
-                                const Spacer(),
-                                if (risk)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.danger.withValues(alpha: .11),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const Text('ATENÇÃO',
-                                        style: TextStyle(
-                                            color: AppColors.danger,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w900)),
-                                  )
-                                else
-                                  const GoldBadge('ATIVA'),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Text(subject.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-                            const SizedBox(height: 5),
-                            Text(subject.professor, style: Theme.of(context).textTheme.bodySmall),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                const Icon(Icons.location_on_outlined, size: 15),
-                                const SizedBox(width: 4),
-                                Text(subject.room, style: Theme.of(context).textTheme.bodySmall),
-                              ],
-                            ),
-                            const Spacer(),
-                            Row(
-                              children: [
-                                Expanded(child: _stat(context, 'Média', subject.grade.toStringAsFixed(1))),
-                                Container(width: 1, height: 34, color: Theme.of(context).dividerColor),
-                                Expanded(child: _stat(context, 'Frequência', '${subject.attendance}%')),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
+              const SizedBox(height: 17),
+              if (state.subjects.isNotEmpty) ...[
+                TextField(
+                  onChanged: (v) => setState(() => search = v),
+                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search_rounded), hintText: 'Buscar matéria...'),
+                ),
+                const SizedBox(height: 17),
+              ],
+              if (state.subjects.isEmpty)
+                EmptyState(
+                  icon: Icons.auto_stories_rounded,
+                  title: 'Nenhuma matéria cadastrada',
+                  message: 'Adicione as disciplinas do semestre para começar a acompanhar notas, frequência, horários e atividades.',
+                  actionLabel: 'Cadastrar matéria',
+                  onAction: () => showSubjectEditor(context, state),
+                )
+              else if (filtered.isEmpty)
+                const EmptyState(
+                  icon: Icons.search_off_rounded,
+                  title: 'Nenhum resultado',
+                  message: 'Não encontramos uma matéria com esse nome.',
+                )
+              else
+                LayoutBuilder(
+                  builder: (context, c) {
+                    final cols = c.maxWidth >= 970 ? 3 : c.maxWidth >= 620 ? 2 : 1;
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: filtered.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: cols,
+                        crossAxisSpacing: 13,
+                        mainAxisSpacing: 13,
+                        childAspectRatio: cols == 1 ? 1.8 : 1.14,
+                      ),
+                      itemBuilder: (_, i) => _SubjectCard(state: state, subject: filtered[i]),
+                    );
+                  },
+                ),
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _stat(BuildContext context, String label, String value) {
+class _SubjectCard extends StatelessWidget {
+  const _SubjectCard({required this.state, required this.subject});
+  final AppState state;
+  final Subject subject;
+
+  @override
+  Widget build(BuildContext context) {
+    final avg = subject.id == null ? null : state.averageForSubject(subject.id!);
+    final risk = state.isSubjectAtRisk(subject);
+    final pending = subject.id == null ? 0 : state.tasksForSubject(subject.id!).where((e) => e.status != TaskStatus.done).length;
+
+    return SoftCard(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => SubjectDetailScreen(subjectId: subject.id!)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 49,
+                height: 49,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.auto_stories_rounded),
+              ),
+              const Spacer(),
+              if (risk)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(color: AppColors.danger.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)),
+                  child: const Text('ATENÇÃO', style: TextStyle(color: AppColors.danger, fontSize: 9, fontWeight: FontWeight.w900)),
+                )
+              else
+                const GoldBadge('ATIVA'),
+              PopupMenuButton<String>(
+                onSelected: (value) async {
+                  if (value == 'edit') {
+                    await showSubjectEditor(context, state, subject: subject);
+                  } else if (value == 'delete') {
+                    if (await confirmDelete(context, subject.name)) await state.deleteSubject(subject);
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'))),
+                  PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline_rounded), title: Text('Excluir'))),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Text(subject.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 5),
+          Text(subject.professor.isEmpty ? 'Professor não informado' : subject.professor, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(Icons.location_on_outlined, size: 14),
+              const SizedBox(width: 4),
+              Expanded(child: Text(subject.room.isEmpty ? 'Local não informado' : subject.room, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall)),
+            ],
+          ),
+          const Spacer(),
+          Row(
+            children: [
+              Expanded(child: _Stat(label: 'Média', value: avg == null ? '—' : avg.toStringAsFixed(1))),
+              Container(width: 1, height: 34, color: Theme.of(context).dividerColor),
+              Expanded(child: _Stat(label: 'Frequência', value: '${subject.attendance.toStringAsFixed(0)}%')),
+              Container(width: 1, height: 34, color: Theme.of(context).dividerColor),
+              Expanded(child: _Stat(label: 'Pendentes', value: '$pending')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
         Text(label, style: Theme.of(context).textTheme.labelSmall),
       ],
     );

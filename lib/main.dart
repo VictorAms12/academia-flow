@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'app.dart';
+import 'state/app_state.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const AcademiaFlowApp());
+  final state = AppState();
+  await state.initialize();
+  runApp(AcademiaFlowApp(state: state));
 }

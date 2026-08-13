@@ -14,7 +14,7 @@ class SectionTitle extends StatelessWidget {
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w900,
                   letterSpacing: -.4,
                 ),
           ),
@@ -32,40 +32,42 @@ class SoftCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(18),
     this.onTap,
   });
+
   final Widget child;
   final EdgeInsets padding;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final border = Theme.of(context).brightness == Brightness.dark
-        ? Colors.white.withValues(alpha: .06)
-        : Colors.black.withValues(alpha: .05);
-    final content = Container(
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final box = Container(
       padding: padding,
       decoration: BoxDecoration(
         color: Theme.of(context).cardTheme.color,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: border),
-        boxShadow: Theme.of(context).brightness == Brightness.light
-            ? [
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: .06)
+              : Colors.black.withValues(alpha: .05),
+        ),
+        boxShadow: dark
+            ? null
+            : [
                 BoxShadow(
-                  blurRadius: 24,
+                  blurRadius: 22,
                   offset: const Offset(0, 8),
                   color: Colors.black.withValues(alpha: .035),
-                )
-              ]
-            : null,
+                ),
+              ],
       ),
       child: child,
     );
-    return onTap == null
-        ? content
-        : InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(16),
-            child: content,
-          );
+    if (onTap == null) return box;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: box,
+    );
   }
 }
 
@@ -86,54 +88,109 @@ class GoldBadge extends StatelessWidget {
         text,
         style: const TextStyle(
           color: AppColors.gold,
-          fontWeight: FontWeight.w800,
-          fontSize: 11,
+          fontSize: 10,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );
   }
 }
 
-class MetricRing extends StatelessWidget {
-  const MetricRing({
+class EmptyState extends StatelessWidget {
+  const EmptyState({
     super.key,
-    required this.value,
-    required this.label,
-    this.size = 76,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
   });
-  final double value;
-  final String label;
-  final double size;
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox.expand(
-            child: CircularProgressIndicator(
-              value: value,
-              strokeWidth: 7,
-              backgroundColor:
-                  Theme.of(context).colorScheme.primary.withValues(alpha: .10),
-              color: AppColors.gold,
+    return SoftCard(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 22),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Column(
+              children: [
+                Container(
+                  width: 62,
+                  height: 62,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(icon, size: 30, color: Theme.of(context).colorScheme.primary),
+                ),
+                const SizedBox(height: 15),
+                Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 6),
+                Text(message, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5)),
+                if (actionLabel != null && onAction != null) ...[
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: onAction,
+                    icon: const Icon(Icons.add_rounded),
+                    label: Text(actionLabel!),
+                  ),
+                ],
+              ],
             ),
           ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${(value * 100).round()}%',
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
-              ),
-              Text(label, style: Theme.of(context).textTheme.labelSmall),
-            ],
-          )
-        ],
+        ),
       ),
     );
   }
+}
+
+class PageHeader extends StatelessWidget {
+  const PageHeader({super.key, required this.title, required this.subtitle, this.action});
+  final String title;
+  final String subtitle;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -1,
+                    ),
+              ),
+              const SizedBox(height: 5),
+              Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+        ),
+        if (action != null) action!,
+      ],
+    );
+  }
+}
+
+String formatDate(DateTime date) {
+  const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+  return '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]}';
+}
+
+String dayName(int day) {
+  const days = ['', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+  return day >= 1 && day <= 7 ? days[day] : '';
 }

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../data/demo_data.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/forms.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -11,8 +11,10 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
-    final pending = state.tasks.where((e) => e.status != TaskStatus.done).toList()
+    final upcoming = state.tasks.where((t) => t.status != TaskStatus.done).toList()
       ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    final todaySchedules = state.schedules.where((s) => s.day == DateTime.now().weekday).toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
@@ -22,143 +24,58 @@ class DashboardScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  return _HeroHeader(compact: constraints.maxWidth < 680);
-                },
-              ),
-              const SizedBox(height: 22),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final wide = constraints.maxWidth >= 760;
-                  final cards = [
-                    _MetricCard(
-                      icon: Icons.grade_rounded,
-                      label: 'Média geral',
-                      value: '8,2',
-                      caption: '+0,4 neste semestre',
-                      accent: AppColors.gold,
-                    ),
-                    _MetricCard(
-                      icon: Icons.done_all_rounded,
-                      label: 'Atividades',
-                      value: '${state.tasks.where((e) => e.status == TaskStatus.done).length}/${state.tasks.length}',
-                      caption: '${state.pendingCount} ainda pendentes',
-                    ),
-                    const _MetricCard(
-                      icon: Icons.event_available_rounded,
-                      label: 'Frequência',
-                      value: '89,8%',
-                      caption: 'Acima do mínimo',
-                    ),
-                  ];
-                  if (wide) {
-                    return Row(
-                      children: [
-                        for (var i = 0; i < cards.length; i++) ...[
-                          Expanded(child: cards[i]),
-                          if (i != cards.length - 1) const SizedBox(width: 12),
-                        ]
-                      ],
-                    );
-                  }
-                  return Column(
-                    children: [
-                      for (var i = 0; i < cards.length; i++) ...[
-                        cards[i],
-                        if (i != cards.length - 1) const SizedBox(height: 10),
-                      ]
-                    ],
-                  );
-                },
+              _Hero(state: state, nextTask: upcoming.isEmpty ? null : upcoming.first),
+              const SizedBox(height: 18),
+              _Metrics(state: state),
+              const SizedBox(height: 24),
+              const SectionTitle('Acesso rápido'),
+              const SizedBox(height: 11),
+              Wrap(
+                spacing: 9,
+                runSpacing: 9,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: () => showTaskEditor(context, state),
+                    icon: const Icon(Icons.add_task_rounded),
+                    label: const Text('Nova atividade'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: () => showSubjectEditor(context, state),
+                    icon: const Icon(Icons.auto_stories_rounded),
+                    label: const Text('Nova matéria'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: () => showNoteEditor(context, state),
+                    icon: const Icon(Icons.note_add_outlined),
+                    label: const Text('Nova anotação'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: () => state.setIndex(4),
+                    icon: const Icon(Icons.today_rounded),
+                    label: const Text('Horário do dia'),
+                  ),
+                ],
               ),
               const SizedBox(height: 26),
-              const SectionTitle('Acesso rápido'),
-              const SizedBox(height: 12),
-              _QuickActions(state: state),
-              const SizedBox(height: 28),
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final wide = constraints.maxWidth >= 850;
-                  final deadlines = _Deadlines(tasks: pending.take(4).toList());
-                  const progress = _SemesterProgress();
-                  if (wide) {
+                  final left = _UpcomingPanel(state: state, tasks: upcoming.take(5).toList());
+                  final right = _TodayPanel(state: state, schedules: todaySchedules);
+                  if (constraints.maxWidth >= 850) {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(flex: 3, child: deadlines),
-                        const SizedBox(width: 16),
-                        const Expanded(flex: 2, child: progress),
+                        Expanded(flex: 3, child: left),
+                        const SizedBox(width: 14),
+                        Expanded(flex: 2, child: right),
                       ],
                     );
                   }
-                  return Column(
-                    children: [
-                      deadlines,
-                      const SizedBox(height: 16),
-                      progress,
-                    ],
-                  );
+                  return Column(children: [left, const SizedBox(height: 14), right]);
                 },
               ),
-              const SizedBox(height: 28),
-              const SectionTitle('Matérias em foco'),
-              const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final cols = constraints.maxWidth > 950 ? 3 : constraints.maxWidth > 620 ? 2 : 1;
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: 3,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: cols,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: cols == 1 ? 2.5 : 1.75,
-                    ),
-                    itemBuilder: (_, i) {
-                      final s = subjects[i];
-                      return SoftCard(
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 24,
-                              backgroundColor: s.color.withValues(alpha: .15),
-                              child: Icon(s.icon, color: s.color),
-                            ),
-                            const SizedBox(width: 13),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(s.name,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                                  const SizedBox(height: 7),
-                                  Row(
-                                    children: [
-                                      Text('Média ${s.grade.toStringAsFixed(1)}',
-                                          style: Theme.of(context).textTheme.bodySmall),
-                                      const SizedBox(width: 8),
-                                      const Text('•'),
-                                      const SizedBox(width: 8),
-                                      Text('${s.attendance}% freq.',
-                                          style: Theme.of(context).textTheme.bodySmall),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            )
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
+              const SizedBox(height: 24),
+              _SubjectsSnapshot(state: state),
             ],
           ),
         ),
@@ -167,259 +84,149 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
-class _HeroHeader extends StatelessWidget {
-  const _HeroHeader({required this.compact});
-  final bool compact;
+class _Hero extends StatelessWidget {
+  const _Hero({required this.state, required this.nextTask});
+  final AppState state;
+  final AcademicTask? nextTask;
 
   @override
   Widget build(BuildContext context) {
+    final firstName = state.userName.trim().split(' ').first;
+    String subtitle;
+    if (nextTask == null) {
+      subtitle = state.tasks.isEmpty
+          ? 'Seu espaço está pronto. Comece cadastrando suas matérias e atividades.'
+          : 'Você não tem atividades pendentes. Bom trabalho!';
+    } else {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final due = DateTime(nextTask!.dueDate.year, nextTask!.dueDate.month, nextTask!.dueDate.day);
+      final days = due.difference(today).inDays;
+      final when = days < 0 ? 'está atrasada' : days == 0 ? 'vence hoje' : days == 1 ? 'vence amanhã' : 'vence em $days dias';
+      subtitle = '“${nextTask!.title}” $when.';
+    }
+
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(compact ? 20 : 28),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.petroleum,
-            const Color(0xFF123A44),
-            AppColors.petroleumDark.withValues(alpha: .96),
-          ],
+        gradient: const LinearGradient(
+          colors: [AppColors.petroleum, Color(0xFF123A44), AppColors.petroleumDark],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.gold.withValues(alpha: .18)),
+        border: Border.all(color: AppColors.gold.withValues(alpha: .16)),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            right: -30,
-            top: -55,
-            child: Container(
-              width: 190,
-              height: 190,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.gold.withValues(alpha: .07),
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const GoldBadge('SEMESTRE 2026.2'),
-              const SizedBox(height: 16),
-              Text(
-                'Olá, Victor! 👋',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: compact ? 25 : 32,
-                  letterSpacing: -1,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Sua próxima entrega é amanhã. Você está com o semestre sob controle.',
-                style: TextStyle(color: Color(0xFFD5E2E5), height: 1.5),
-              ),
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _heroChip(Icons.timer_outlined, '1 dia para o próximo prazo'),
-                  _heroChip(Icons.local_fire_department_outlined, '7 dias de sequência'),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heroChip(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: .10)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(width: 2),
-          Icon(icon, color: AppColors.gold, size: 16),
-          const SizedBox(width: 7),
-          Text(text, style: const TextStyle(color: Colors.white, fontSize: 12)),
+          if (state.semester.isNotEmpty) GoldBadge(state.semester.toUpperCase()),
+          if (state.semester.isNotEmpty) const SizedBox(height: 14),
+          Text('Olá, $firstName! 👋', style: const TextStyle(color: Colors.white, fontSize: 29, fontWeight: FontWeight.w900, letterSpacing: -1)),
+          const SizedBox(height: 6),
+          Text(subtitle, style: const TextStyle(color: Color(0xFFD5E2E5), height: 1.5)),
         ],
       ),
     );
   }
 }
 
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.caption,
-    this.accent,
-  });
+class _Metrics extends StatelessWidget {
+  const _Metrics({required this.state});
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final avg = state.overallAverage;
+    final attendance = state.averageAttendance;
+    final items = [
+      _Metric(icon: Icons.grade_rounded, label: 'Média geral', value: avg == null ? '—' : avg.toStringAsFixed(2), caption: avg == null ? 'Cadastre suas notas' : 'Calculada pelas matérias', color: AppColors.gold),
+      _Metric(icon: Icons.done_all_rounded, label: 'Atividades', value: '${state.completedCount}/${state.tasks.length}', caption: '${state.pendingCount} pendente${state.pendingCount == 1 ? '' : 's'}'),
+      _Metric(icon: Icons.event_available_rounded, label: 'Frequência', value: attendance == null ? '—' : '${attendance.toStringAsFixed(1)}%', caption: state.subjects.isEmpty ? 'Cadastre suas matérias' : 'Média das disciplinas'),
+    ];
+    return LayoutBuilder(
+      builder: (context, c) {
+        if (c.maxWidth >= 760) {
+          return Row(children: [
+            for (var i = 0; i < items.length; i++) ...[
+              Expanded(child: items[i]),
+              if (i < items.length - 1) const SizedBox(width: 11),
+            ]
+          ]);
+        }
+        return Column(children: [
+          for (var i = 0; i < items.length; i++) ...[
+            items[i],
+            if (i < items.length - 1) const SizedBox(height: 9),
+          ]
+        ]);
+      },
+    );
+  }
+}
+
+class _Metric extends StatelessWidget {
+  const _Metric({required this.icon, required this.label, required this.value, required this.caption, this.color});
   final IconData icon;
   final String label;
   final String value;
   final String caption;
-  final Color? accent;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final accent = color ?? Theme.of(context).colorScheme.primary;
     return SoftCard(
       child: Row(
         children: [
           Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: (accent ?? Theme.of(context).colorScheme.primary)
-                  .withValues(alpha: .11),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: accent ?? Theme.of(context).colorScheme.primary),
+            width: 45,
+            height: 45,
+            decoration: BoxDecoration(color: accent.withValues(alpha: .11), borderRadius: BorderRadius.circular(14)),
+            child: Icon(icon, color: accent),
           ),
-          const SizedBox(width: 13),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 2),
-                Text(value,
-                    style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
-                Text(caption,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall),
+                Text(value, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+                Text(caption, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
   }
 }
 
-class _QuickActions extends StatelessWidget {
-  const _QuickActions({required this.state});
+class _UpcomingPanel extends StatelessWidget {
+  const _UpcomingPanel({required this.state, required this.tasks});
   final AppState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = [
-      (Icons.add_task_rounded, 'Adicionar atividade', () => _showAddTask(context)),
-      (Icons.note_add_outlined, 'Nova anotação', () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Anotação rápida criada no protótipo.')),
-        );
-      }),
-      (Icons.today_rounded, 'Horário do dia', () => state.setIndex(4)),
-    ];
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        for (final a in actions)
-          FilledButton.tonalIcon(
-            onPressed: a.$3,
-            icon: Icon(a.$1),
-            label: Text(a.$2),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-          )
-      ],
-    );
-  }
-
-  void _showAddTask(BuildContext context) {
-    final title = TextEditingController();
-    String subject = subjects.first.name;
-    Priority priority = Priority.medium;
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: const Text('Nova atividade'),
-          content: SizedBox(
-            width: 430,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(controller: title, decoration: const InputDecoration(labelText: 'Título')),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: subject,
-                  decoration: const InputDecoration(labelText: 'Matéria'),
-                  items: subjects
-                      .map((e) => DropdownMenuItem(value: e.name, child: Text(e.name)))
-                      .toList(),
-                  onChanged: (v) => setLocal(() => subject = v!),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<Priority>(
-                  initialValue: priority,
-                  decoration: const InputDecoration(labelText: 'Prioridade'),
-                  items: const [
-                    DropdownMenuItem(value: Priority.high, child: Text('Alta')),
-                    DropdownMenuItem(value: Priority.medium, child: Text('Média')),
-                    DropdownMenuItem(value: Priority.low, child: Text('Baixa')),
-                  ],
-                  onChanged: (v) => setLocal(() => priority = v!),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-            FilledButton(
-              onPressed: () {
-                if (title.text.trim().isEmpty) return;
-                state.addTask(
-                  AcademicTask(
-                    id: DateTime.now().millisecondsSinceEpoch,
-                    title: title.text.trim(),
-                    subject: subject,
-                    dueDate: DateTime.now().add(const Duration(days: 7)),
-                    priority: priority,
-                    status: TaskStatus.todo,
-                  ),
-                );
-                Navigator.pop(context);
-              },
-              child: const Text('Adicionar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Deadlines extends StatelessWidget {
-  const _Deadlines({required this.tasks});
   final List<AcademicTask> tasks;
 
   @override
   Widget build(BuildContext context) {
+    if (tasks.isEmpty) {
+      return EmptyState(
+        icon: Icons.task_alt_rounded,
+        title: 'Nenhum prazo pendente',
+        message: 'Adicione trabalhos, provas ou lembretes para acompanhar os próximos prazos.',
+        actionLabel: 'Adicionar atividade',
+        onAction: () => showTaskEditor(context, state),
+      );
+    }
     return SoftCard(
       child: Column(
         children: [
-          const SectionTitle('Próximos prazos', trailing: GoldBadge('7 DIAS')),
-          const SizedBox(height: 10),
+          SectionTitle('Próximos prazos', trailing: TextButton(onPressed: () => state.setIndex(2), child: const Text('Ver todos'))),
+          const SizedBox(height: 7),
           for (var i = 0; i < tasks.length; i++) ...[
-            _DeadlineRow(task: tasks[i]),
-            if (i != tasks.length - 1) const Divider(height: 22),
+            _TaskRow(state: state, task: tasks[i]),
+            if (i < tasks.length - 1) const Divider(height: 22),
           ],
         ],
       ),
@@ -427,93 +234,168 @@ class _Deadlines extends StatelessWidget {
   }
 }
 
-class _DeadlineRow extends StatelessWidget {
-  const _DeadlineRow({required this.task});
+class _TaskRow extends StatelessWidget {
+  const _TaskRow({required this.state, required this.task});
+  final AppState state;
   final AcademicTask task;
 
   @override
   Widget build(BuildContext context) {
-    final days = task.dueDate.difference(DateTime.now()).inDays + 1;
-    return Row(
-      children: [
-        Container(
-          width: 46,
-          height: 48,
-          decoration: BoxDecoration(
-            color: days <= 2
-                ? AppColors.danger.withValues(alpha: .10)
-                : Theme.of(context).colorScheme.primary.withValues(alpha: .08),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            days <= 1 ? 'AMANHÃ' : '${days}d',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: days <= 1 ? 9 : 13,
-              fontWeight: FontWeight.w900,
-              color: days <= 2 ? AppColors.danger : null,
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final due = DateTime(task.dueDate.year, task.dueDate.month, task.dueDate.day);
+    final days = due.difference(today).inDays;
+    final urgent = days <= 1;
+    final label = days < 0 ? '${days.abs()}d ATRASO' : days == 0 ? 'HOJE' : days == 1 ? 'AMANHÃ' : '${days}d';
+    return InkWell(
+      onTap: () => showTaskEditor(context, state, task: task),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 46,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: urgent ? AppColors.danger.withValues(alpha: .10) : Theme.of(context).colorScheme.primary.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: urgent ? AppColors.danger : null)),
             ),
-          ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(task.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 2),
+                  Text(state.subjectName(task.subjectId), style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            GoldBadge(task.priority == Priority.high ? 'ALTA' : task.priority == Priority.medium ? 'MÉDIA' : 'BAIXA'),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(task.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 2),
-              Text(task.subject, style: Theme.of(context).textTheme.bodySmall),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        GoldBadge(task.priority == Priority.high ? 'ALTA' : task.priority == Priority.medium ? 'MÉDIA' : 'BAIXA'),
-      ],
+      ),
     );
   }
 }
 
-class _SemesterProgress extends StatelessWidget {
-  const _SemesterProgress();
+class _TodayPanel extends StatelessWidget {
+  const _TodayPanel({required this.state, required this.schedules});
+  final AppState state;
+  final List<ScheduleEntry> schedules;
 
   @override
   Widget build(BuildContext context) {
+    if (schedules.isEmpty) {
+      return EmptyState(
+        icon: Icons.calendar_today_rounded,
+        title: 'Sem aulas hoje',
+        message: state.schedules.isEmpty ? 'Cadastre sua grade semanal para visualizar a rotina diária.' : 'Não há horários cadastrados para hoje.',
+        actionLabel: state.subjects.isEmpty ? null : 'Adicionar horário',
+        onAction: state.subjects.isEmpty ? null : () => showScheduleEditor(context, state),
+      );
+    }
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionTitle('Progresso do semestre'),
-          const SizedBox(height: 18),
-          const Center(child: MetricRing(value: .42, label: 'concluído', size: 116)),
-          const SizedBox(height: 20),
-          _progress(context, 'Atividades concluídas', .68),
+          const SectionTitle('Hoje'),
           const SizedBox(height: 12),
-          _progress(context, 'Conteúdos revisados', .54),
-          const SizedBox(height: 12),
-          _progress(context, 'Presença média', .90),
+          for (var i = 0; i < schedules.length; i++) ...[
+            Row(
+              children: [
+                Container(width: 4, height: 46, decoration: BoxDecoration(color: i == 0 ? AppColors.gold : Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(4))),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(state.subjectName(schedules[i].subjectId), style: const TextStyle(fontWeight: FontWeight.w900)),
+                      Text('${schedules[i].start}–${schedules[i].end}${schedules[i].room.isEmpty ? '' : ' • ${schedules[i].room}'}', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (i < schedules.length - 1) const Divider(height: 22),
+          ],
         ],
       ),
     );
   }
+}
 
-  Widget _progress(BuildContext context, String label, double value) {
+class _SubjectsSnapshot extends StatelessWidget {
+  const _SubjectsSnapshot({required this.state});
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.subjects.isEmpty) {
+      return EmptyState(
+        icon: Icons.auto_stories_rounded,
+        title: 'Comece pelas suas matérias',
+        message: 'Cadastre as disciplinas do semestre. Depois você poderá adicionar notas, faltas, horários, tarefas e materiais.',
+        actionLabel: 'Cadastrar primeira matéria',
+        onAction: () => showSubjectEditor(context, state),
+      );
+    }
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(child: Text(label, style: Theme.of(context).textTheme.bodySmall)),
-            Text('${(value * 100).round()}%', style: const TextStyle(fontWeight: FontWeight.w800)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        LinearProgressIndicator(
-          value: value,
-          minHeight: 7,
-          borderRadius: BorderRadius.circular(20),
+        SectionTitle('Resumo das matérias', trailing: TextButton(onPressed: () => state.setIndex(1), child: const Text('Gerenciar'))),
+        const SizedBox(height: 11),
+        LayoutBuilder(
+          builder: (context, c) {
+            final cols = c.maxWidth >= 930 ? 3 : c.maxWidth >= 600 ? 2 : 1;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: state.subjects.length.clamp(0, 6).toInt(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: cols,
+                crossAxisSpacing: 11,
+                mainAxisSpacing: 11,
+                childAspectRatio: cols == 1 ? 2.45 : 1.65,
+              ),
+              itemBuilder: (_, i) {
+                final s = state.subjects[i];
+                final avg = s.id == null ? null : state.averageForSubject(s.id!);
+                final risk = state.isSubjectAtRisk(s);
+                return SoftCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(child: Text(s.name.substring(0, 1).toUpperCase())),
+                          const Spacer(),
+                          if (risk)
+                            const Icon(Icons.warning_amber_rounded, color: AppColors.danger, size: 20)
+                          else
+                            const Icon(Icons.check_circle_outline_rounded, color: AppColors.success, size: 20),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(s.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          Expanded(child: Text('Média ${avg == null ? '—' : avg.toStringAsFixed(1)}', style: Theme.of(context).textTheme.bodySmall)),
+                          Text('${s.attendance.toStringAsFixed(0)}% freq.', style: Theme.of(context).textTheme.bodySmall),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
         ),
       ],
     );
