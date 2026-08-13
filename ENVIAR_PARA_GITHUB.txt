@@ -1,0 +1,36 @@
+ACADEMIA FLOW - ENVIAR PARA O GITHUB
+
+1) Extraia este ZIP.
+2) Abra o terminal dentro da pasta academia_flow_github.
+3) Crie um repositorio VAZIO no GitHub.
+4) Execute, substituindo a URL:
+
+git init
+git add .
+git commit -m "Academia Flow - build GitHub"
+git branch -M main
+git remote add origin https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
+git push -u origin main
+
+SE APARECER "remote origin already exists":
+
+git remote set-url origin https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git
+git push -u origin main
+
+SE APARECER "src refspec main does not match any":
+
+git add .
+git commit -m "Academia Flow - build GitHub"
+git branch -M main
+git push -u origin main
+
+DEPOIS DO PUSH:
+GitHub > Actions > Build Android APK
+
+Quando terminar:
+Artifacts > academia-flow-apk
+
+Dentro do artifact estara o app-release.apk.
+
+Se o Release falhar, rode manualmente:
+Actions > Build Debug APK > Run workflow
