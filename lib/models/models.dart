@@ -7,6 +7,7 @@ class Subject {
     this.professor = '',
     this.room = '',
     this.totalClasses = 0,
+    this.plannedClasses = 0,
     this.absences = 0,
   });
 
@@ -15,6 +16,7 @@ class Subject {
   final String professor;
   final String room;
   final int totalClasses;
+  final int plannedClasses;
   final int absences;
 
   double get attendance {
@@ -29,17 +31,17 @@ class Subject {
     String? professor,
     String? room,
     int? totalClasses,
+    int? plannedClasses,
     int? absences,
-  }) {
-    return Subject(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      professor: professor ?? this.professor,
-      room: room ?? this.room,
-      totalClasses: totalClasses ?? this.totalClasses,
-      absences: absences ?? this.absences,
-    );
-  }
+  }) => Subject(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        professor: professor ?? this.professor,
+        room: room ?? this.room,
+        totalClasses: totalClasses ?? this.totalClasses,
+        plannedClasses: plannedClasses ?? this.plannedClasses,
+        absences: absences ?? this.absences,
+      );
 
   Map<String, Object?> toMap() => {
         if (id != null) 'id': id,
@@ -47,6 +49,7 @@ class Subject {
         'professor': professor,
         'room': room,
         'total_classes': totalClasses,
+        'planned_classes': plannedClasses,
         'absences': absences,
       };
 
@@ -56,12 +59,14 @@ class Subject {
         professor: (map['professor'] as String?) ?? '',
         room: (map['room'] as String?) ?? '',
         totalClasses: (map['total_classes'] as int?) ?? 0,
+        plannedClasses: (map['planned_classes'] as int?) ?? 0,
         absences: (map['absences'] as int?) ?? 0,
       );
 }
 
 enum TaskStatus { todo, doing, done }
 enum Priority { high, medium, low }
+enum TaskKind { activity, exam, seminar, project, reading, other }
 
 class AcademicTask {
   const AcademicTask({
@@ -71,6 +76,8 @@ class AcademicTask {
     required this.dueDate,
     this.priority = Priority.medium,
     this.status = TaskStatus.todo,
+    this.kind = TaskKind.activity,
+    this.reminderEnabled = true,
     this.description = '',
     this.checklist = const [],
     this.completedSteps = const [],
@@ -82,6 +89,8 @@ class AcademicTask {
   final DateTime dueDate;
   final Priority priority;
   final TaskStatus status;
+  final TaskKind kind;
+  final bool reminderEnabled;
   final String description;
   final List<String> checklist;
   final List<int> completedSteps;
@@ -94,22 +103,24 @@ class AcademicTask {
     DateTime? dueDate,
     Priority? priority,
     TaskStatus? status,
+    TaskKind? kind,
+    bool? reminderEnabled,
     String? description,
     List<String>? checklist,
     List<int>? completedSteps,
-  }) {
-    return AcademicTask(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      subjectId: clearSubject ? null : subjectId ?? this.subjectId,
-      dueDate: dueDate ?? this.dueDate,
-      priority: priority ?? this.priority,
-      status: status ?? this.status,
-      description: description ?? this.description,
-      checklist: checklist ?? this.checklist,
-      completedSteps: completedSteps ?? this.completedSteps,
-    );
-  }
+  }) => AcademicTask(
+        id: id ?? this.id,
+        title: title ?? this.title,
+        subjectId: clearSubject ? null : subjectId ?? this.subjectId,
+        dueDate: dueDate ?? this.dueDate,
+        priority: priority ?? this.priority,
+        status: status ?? this.status,
+        kind: kind ?? this.kind,
+        reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+        description: description ?? this.description,
+        checklist: checklist ?? this.checklist,
+        completedSteps: completedSteps ?? this.completedSteps,
+      );
 
   Map<String, Object?> toMap() => {
         if (id != null) 'id': id,
@@ -118,6 +129,8 @@ class AcademicTask {
         'due_date': dueDate.toIso8601String(),
         'priority': priority.index,
         'status': status.index,
+        'kind': kind.index,
+        'reminder_enabled': reminderEnabled ? 1 : 0,
         'description': description,
         'checklist': jsonEncode(checklist),
         'completed_steps': jsonEncode(completedSteps),
@@ -130,120 +143,63 @@ class AcademicTask {
         dueDate: DateTime.parse(map['due_date'] as String),
         priority: Priority.values[(map['priority'] as int?) ?? 1],
         status: TaskStatus.values[(map['status'] as int?) ?? 0],
+        kind: TaskKind.values[(map['kind'] as int?) ?? 0],
+        reminderEnabled: ((map['reminder_enabled'] as int?) ?? 1) == 1,
         description: (map['description'] as String?) ?? '',
-        checklist: List<String>.from(
-          jsonDecode((map['checklist'] as String?) ?? '[]') as List,
-        ),
-        completedSteps: List<int>.from(
-          jsonDecode((map['completed_steps'] as String?) ?? '[]') as List,
-        ),
+        checklist: List<String>.from(jsonDecode((map['checklist'] as String?) ?? '[]') as List),
+        completedSteps: List<int>.from(jsonDecode((map['completed_steps'] as String?) ?? '[]') as List),
       );
 }
 
 class Grade {
-  const Grade({
-    this.id,
-    required this.subjectId,
-    required this.title,
-    required this.value,
-    this.weight = 1,
-    required this.date,
-  });
-
+  const Grade({this.id, required this.subjectId, required this.title, required this.value, this.weight = 1, required this.date});
   final int? id;
   final int subjectId;
   final String title;
   final double value;
   final double weight;
   final DateTime date;
-
-  Map<String, Object?> toMap() => {
-        if (id != null) 'id': id,
-        'subject_id': subjectId,
-        'title': title,
-        'value': value,
-        'weight': weight,
-        'date': date.toIso8601String(),
-      };
-
-  factory Grade.fromMap(Map<String, Object?> map) => Grade(
-        id: map['id'] as int?,
-        subjectId: map['subject_id'] as int,
-        title: map['title'] as String,
-        value: (map['value'] as num).toDouble(),
-        weight: (map['weight'] as num?)?.toDouble() ?? 1,
-        date: DateTime.parse(map['date'] as String),
-      );
+  Map<String, Object?> toMap() => {if (id != null) 'id': id, 'subject_id': subjectId, 'title': title, 'value': value, 'weight': weight, 'date': date.toIso8601String()};
+  factory Grade.fromMap(Map<String, Object?> map) => Grade(id: map['id'] as int?, subjectId: map['subject_id'] as int, title: map['title'] as String, value: (map['value'] as num).toDouble(), weight: (map['weight'] as num?)?.toDouble() ?? 1, date: DateTime.parse(map['date'] as String));
 }
 
 class ScheduleEntry {
-  const ScheduleEntry({
-    this.id,
-    required this.subjectId,
-    required this.day,
-    required this.start,
-    required this.end,
-    this.room = '',
-  });
-
+  const ScheduleEntry({this.id, required this.subjectId, required this.day, required this.start, required this.end, this.room = ''});
   final int? id;
   final int subjectId;
   final int day;
   final String start;
   final String end;
   final String room;
-
-  Map<String, Object?> toMap() => {
-        if (id != null) 'id': id,
-        'subject_id': subjectId,
-        'day': day,
-        'start_time': start,
-        'end_time': end,
-        'room': room,
-      };
-
-  factory ScheduleEntry.fromMap(Map<String, Object?> map) => ScheduleEntry(
-        id: map['id'] as int?,
-        subjectId: map['subject_id'] as int,
-        day: map['day'] as int,
-        start: map['start_time'] as String,
-        end: map['end_time'] as String,
-        room: (map['room'] as String?) ?? '',
-      );
+  Map<String, Object?> toMap() => {if (id != null) 'id': id, 'subject_id': subjectId, 'day': day, 'start_time': start, 'end_time': end, 'room': room};
+  factory ScheduleEntry.fromMap(Map<String, Object?> map) => ScheduleEntry(id: map['id'] as int?, subjectId: map['subject_id'] as int, day: map['day'] as int, start: map['start_time'] as String, end: map['end_time'] as String, room: (map['room'] as String?) ?? '');
 }
 
 class AcademicNote {
-  const AcademicNote({
-    this.id,
-    this.subjectId,
-    required this.title,
-    this.content = '',
-    this.link = '',
-    required this.createdAt,
-  });
-
+  const AcademicNote({this.id, this.subjectId, required this.title, this.content = '', this.link = '', this.tags = '', this.pinned = false, required this.createdAt});
   final int? id;
   final int? subjectId;
   final String title;
   final String content;
   final String link;
+  final String tags;
+  final bool pinned;
   final DateTime createdAt;
+  Map<String, Object?> toMap() => {if (id != null) 'id': id, 'subject_id': subjectId, 'title': title, 'content': content, 'link': link, 'tags': tags, 'pinned': pinned ? 1 : 0, 'created_at': createdAt.toIso8601String()};
+  factory AcademicNote.fromMap(Map<String, Object?> map) => AcademicNote(id: map['id'] as int?, subjectId: map['subject_id'] as int?, title: map['title'] as String, content: (map['content'] as String?) ?? '', link: (map['link'] as String?) ?? '', tags: (map['tags'] as String?) ?? '', pinned: ((map['pinned'] as int?) ?? 0) == 1, createdAt: DateTime.parse(map['created_at'] as String));
+}
 
-  Map<String, Object?> toMap() => {
-        if (id != null) 'id': id,
-        'subject_id': subjectId,
-        'title': title,
-        'content': content,
-        'link': link,
-        'created_at': createdAt.toIso8601String(),
-      };
+enum MaterialKind { pdf, slides, video, link, repository, document, other }
 
-  factory AcademicNote.fromMap(Map<String, Object?> map) => AcademicNote(
-        id: map['id'] as int?,
-        subjectId: map['subject_id'] as int?,
-        title: map['title'] as String,
-        content: (map['content'] as String?) ?? '',
-        link: (map['link'] as String?) ?? '',
-        createdAt: DateTime.parse(map['created_at'] as String),
-      );
+class MaterialResource {
+  const MaterialResource({this.id, required this.subjectId, required this.title, this.url = '', this.description = '', this.kind = MaterialKind.link, required this.createdAt});
+  final int? id;
+  final int subjectId;
+  final String title;
+  final String url;
+  final String description;
+  final MaterialKind kind;
+  final DateTime createdAt;
+  Map<String, Object?> toMap() => {if (id != null) 'id': id, 'subject_id': subjectId, 'title': title, 'url': url, 'description': description, 'kind': kind.index, 'created_at': createdAt.toIso8601String()};
+  factory MaterialResource.fromMap(Map<String, Object?> map) => MaterialResource(id: map['id'] as int?, subjectId: map['subject_id'] as int, title: map['title'] as String, url: (map['url'] as String?) ?? '', description: (map['description'] as String?) ?? '', kind: MaterialKind.values[(map['kind'] as int?) ?? 2], createdAt: DateTime.parse(map['created_at'] as String));
 }
