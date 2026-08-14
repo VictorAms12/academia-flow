@@ -18,6 +18,9 @@ class NotificationService {
       importance: fln.Importance.high,
       priority: fln.Priority.high,
     ),
+    windows: fln.WindowsNotificationDetails(
+      subtitle: 'Academia Flow',
+    ),
   );
 
   Future<void> initialize() async {
@@ -30,6 +33,11 @@ class NotificationService {
     await _plugin.initialize(
       settings: const fln.InitializationSettings(
         android: fln.AndroidInitializationSettings('@mipmap/ic_launcher'),
+        windows: fln.WindowsInitializationSettings(
+          appName: 'Academia Flow',
+          appUserModelId: 'VictorAms12.AcademiaFlow.Desktop',
+          guid: '5a7b8911-6ef1-4e6e-9ce3-2b8df6715ae4',
+        ),
       ),
     );
     _ready = true;
@@ -70,15 +78,30 @@ class NotificationService {
 
   Future<void> cancelTask(int taskId) async {
     await initialize();
-    for (var i = 1; i <= 4; i++) { await _plugin.cancel(id: taskId * 10 + i); }
+    for (var i = 1; i <= 4; i++) {
+      await _plugin.cancel(id: taskId * 10 + i);
+    }
   }
 
   Future<void> rescheduleAll(List<AcademicTask> tasks, String Function(int?) subjectName) async {
     await initialize();
     await _plugin.cancelAllPendingNotifications();
-    for (final task in tasks) { await scheduleTask(task, subjectName(task.subjectId)); }
+    for (final task in tasks) {
+      await scheduleTask(task, subjectName(task.subjectId));
+    }
   }
 
-  Future<int> pendingCount() async { await initialize(); return (await _plugin.pendingNotificationRequests()).length; }
-  String _kindName(TaskKind k) => switch(k){TaskKind.exam=>'Prova',TaskKind.seminar=>'Seminário',TaskKind.project=>'Projeto',TaskKind.reading=>'Leitura',TaskKind.other=>'Prazo',TaskKind.activity=>'Atividade'};
+  Future<int> pendingCount() async {
+    await initialize();
+    return (await _plugin.pendingNotificationRequests()).length;
+  }
+
+  String _kindName(TaskKind k) => switch (k) {
+        TaskKind.exam => 'Prova',
+        TaskKind.seminar => 'Seminário',
+        TaskKind.project => 'Projeto',
+        TaskKind.reading => 'Leitura',
+        TaskKind.other => 'Prazo',
+        TaskKind.activity => 'Atividade',
+      };
 }

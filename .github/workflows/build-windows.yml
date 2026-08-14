@@ -1,0 +1,63 @@
+name: Build Windows Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Generate Windows project files
+        run: flutter create . --platforms=windows
+
+      - name: Apply desktop branding
+        shell: pwsh
+        run: |
+          $main = Get-Content windows/runner/main.cpp -Raw
+          $main = $main.Replace('L"academia_flow"', 'L"Academia Flow"')
+          Set-Content windows/runner/main.cpp $main
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze source
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package portable build
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath academia-flow-windows-v2.2.1.zip -Force
+
+      - name: Upload Windows portable app
+        uses: actions/upload-artifact@v4
+        with:
+          name: academia-flow-windows-v2.2.1
+          path: academia-flow-windows-v2.2.1.zip
+          if-no-files-found: error
+          retention-days: 30
