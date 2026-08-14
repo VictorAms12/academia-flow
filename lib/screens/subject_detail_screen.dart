@@ -3,7 +3,7 @@ import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
-import '../widgets/forms.dart';
+import '../widgets/v22_actions.dart';
 
 class SubjectDetailScreen extends StatefulWidget {
   const SubjectDetailScreen({super.key, required this.subjectId});
@@ -261,9 +261,9 @@ class _TasksTab extends StatelessWidget {
         if (tasks.isEmpty)
           EmptyState(
             icon: Icons.assignment_outlined,
-            title: 'Nenhuma atividade nesta matéria',
-            message: 'Cadastre trabalhos, provas, listas e outros prazos relacionados à disciplina.',
-            actionLabel: 'Adicionar atividade',
+            title: 'Nenhum prazo nesta matéria',
+            message: 'Cadastre atividades, provas, seminários, projetos, leituras e outros prazos relacionados à disciplina.',
+            actionLabel: 'Adicionar prazo',
             onAction: () => showTaskEditor(context, state, presetSubjectId: subject.id),
           )
         else
@@ -307,6 +307,7 @@ class _SubjectTaskCard extends StatelessWidget {
             spacing: 7,
             runSpacing: 7,
             children: [
+              GoldBadge(taskKindLabel(task.kind).toUpperCase()),
               GoldBadge(formatDate(task.dueDate)),
               GoldBadge(task.status == TaskStatus.done ? 'CONCLUÍDO' : task.status == TaskStatus.doing ? 'EM ANDAMENTO' : 'A FAZER'),
             ],
@@ -433,9 +434,9 @@ class _NotesTab extends StatelessWidget {
         if (notes.isEmpty)
           EmptyState(
             icon: Icons.folder_copy_outlined,
-            title: 'Nenhum material salvo',
+            title: 'Nenhuma anotação salva',
             message: 'Guarde resumos, observações e links importantes relacionados à matéria.',
-            actionLabel: 'Adicionar material',
+            actionLabel: 'Adicionar anotação',
             onAction: () => showNoteEditor(context, state, presetSubjectId: subject.id),
           )
         else

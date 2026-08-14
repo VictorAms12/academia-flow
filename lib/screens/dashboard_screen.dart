@@ -3,7 +3,7 @@ import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
-import '../widgets/forms.dart';
+import '../widgets/v22_actions.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -37,7 +37,7 @@ class DashboardScreen extends StatelessWidget {
                   FilledButton.tonalIcon(
                     onPressed: () => showTaskEditor(context, state),
                     icon: const Icon(Icons.add_task_rounded),
-                    label: const Text('Nova atividade'),
+                    label: const Text('Novo prazo'),
                   ),
                   FilledButton.tonalIcon(
                     onPressed: () => showSubjectEditor(context, state),
@@ -215,7 +215,7 @@ class _UpcomingPanel extends StatelessWidget {
         icon: Icons.task_alt_rounded,
         title: 'Nenhum prazo pendente',
         message: 'Adicione trabalhos, provas ou lembretes para acompanhar os próximos prazos.',
-        actionLabel: 'Adicionar atividade',
+        actionLabel: 'Adicionar prazo',
         onAction: () => showTaskEditor(context, state),
       );
     }
@@ -271,7 +271,7 @@ class _TaskRow extends StatelessWidget {
                 children: [
                   Text(task.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 2),
-                  Text(state.subjectName(task.subjectId), style: Theme.of(context).textTheme.bodySmall),
+                  Text('${taskKindLabel(task.kind)} • ${state.subjectName(task.subjectId)}', style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
             ),
