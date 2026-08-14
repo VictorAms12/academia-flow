@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -18,26 +20,30 @@ class NotificationService {
       importance: fln.Importance.high,
       priority: fln.Priority.high,
     ),
-    windows: fln.WindowsNotificationDetails(
-      subtitle: 'Academia Flow',
-    ),
   );
+
+  bool get _portableWindows => Platform.isWindows;
 
   Future<void> initialize() async {
     if (_ready) return;
+
+    // No build portátil do Windows, notificações são desativadas para evitar
+    // que a inicialização do plugin bloqueie a criação da janela. Elas podem
+    // ser reativadas quando o app for empacotado com identidade MSIX.
+    if (_portableWindows) {
+      _ready = true;
+      return;
+    }
+
     tz.initializeTimeZones();
     try {
       final info = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(info.identifier));
     } catch (_) {}
+
     await _plugin.initialize(
       settings: const fln.InitializationSettings(
         android: fln.AndroidInitializationSettings('@mipmap/ic_launcher'),
-        windows: fln.WindowsInitializationSettings(
-          appName: 'Academia Flow',
-          appUserModelId: 'VictorAms12.AcademiaFlow.Desktop',
-          guid: '5a7b8911-6ef1-4e6e-9ce3-2b8df6715ae4',
-        ),
       ),
     );
     _ready = true;
@@ -45,15 +51,17 @@ class NotificationService {
 
   Future<bool> requestPermission() async {
     await initialize();
+    if (_portableWindows) return true;
     final android = _plugin.resolvePlatformSpecificImplementation<fln.AndroidFlutterLocalNotificationsPlugin>();
     return await android?.requestNotificationsPermission() ?? true;
   }
 
   Future<void> scheduleTask(AcademicTask task, String subjectName) async {
     await initialize();
-    if (task.id == null) return;
+    if (_portableWindows || task.id == null) return;
     await cancelTask(task.id!);
     if (!task.reminderEnabled || task.status == TaskStatus.done) return;
+
     final due = tz.TZDateTime(tz.local, task.dueDate.year, task.dueDate.month, task.dueDate.day, 9);
     final reminders = <(int, Duration, String)>[
       (1, const Duration(days: 7), 'Falta 1 semana'),
@@ -61,9 +69,13 @@ class NotificationService {
       (3, const Duration(days: 1), 'É amanhã'),
       (4, const Duration(hours: 1), 'Prazo hoje'),
     ];
+
     for (final item in reminders) {
-      final when = item.$1 == 4 ? tz.TZDateTime(tz.local, task.dueDate.year, task.dueDate.month, task.dueDate.day, 8) : due.subtract(item.$2);
+      final when = item.$1 == 4
+          ? tz.TZDateTime(tz.local, task.dueDate.year, task.dueDate.month, task.dueDate.day, 8)
+          : due.subtract(item.$2);
       if (!when.isAfter(tz.TZDateTime.now(tz.local))) continue;
+
       await _plugin.zonedSchedule(
         id: task.id! * 10 + item.$1,
         title: '${_kindName(task.kind)} • ${item.$3}',
@@ -78,6 +90,7 @@ class NotificationService {
 
   Future<void> cancelTask(int taskId) async {
     await initialize();
+    if (_portableWindows) return;
     for (var i = 1; i <= 4; i++) {
       await _plugin.cancel(id: taskId * 10 + i);
     }
@@ -85,6 +98,7 @@ class NotificationService {
 
   Future<void> rescheduleAll(List<AcademicTask> tasks, String Function(int?) subjectName) async {
     await initialize();
+    if (_portableWindows) return;
     await _plugin.cancelAllPendingNotifications();
     for (final task in tasks) {
       await scheduleTask(task, subjectName(task.subjectId));
@@ -93,6 +107,7 @@ class NotificationService {
 
   Future<int> pendingCount() async {
     await initialize();
+    if (_portableWindows) return 0;
     return (await _plugin.pendingNotificationRequests()).length;
   }
 
