@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+
+import '../integrations/google/google_integration_controller.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/motion.dart';
+import 'google_integration_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -47,6 +51,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
+    final google = GoogleIntegrationController.instance;
     return Scaffold(
       appBar: AppBar(title: const Text('Configurações')),
       body: SingleChildScrollView(
@@ -57,7 +62,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const PageHeader(title: 'Seu espaço acadêmico', subtitle: 'Personalize seus dados e critérios de acompanhamento.'),
+                const PageHeader(title: 'Seu espaço acadêmico', subtitle: 'Personalize seus dados, integrações e critérios de acompanhamento.'),
                 const SizedBox(height: 16),
                 SoftCard(
                   child: Column(
@@ -69,13 +74,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 11),
                       TextField(controller: course, decoration: const InputDecoration(labelText: 'Curso')),
                       const SizedBox(height: 11),
-                      Row(
-                        children: [
-                          Expanded(child: TextField(controller: period, decoration: const InputDecoration(labelText: 'Período'))),
-                          const SizedBox(width: 10),
-                          Expanded(child: TextField(controller: semester, decoration: const InputDecoration(labelText: 'Semestre'))),
-                        ],
-                      ),
+                      Row(children: [
+                        Expanded(child: TextField(controller: period, decoration: const InputDecoration(labelText: 'Período'))),
+                        const SizedBox(width: 10),
+                        Expanded(child: TextField(controller: semester, decoration: const InputDecoration(labelText: 'Semestre'))),
+                      ]),
                       const SizedBox(height: 14),
                       Align(
                         alignment: Alignment.centerRight,
@@ -95,6 +98,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 13),
+                AnimatedBuilder(
+                  animation: google,
+                  builder: (context, _) => SoftCard(
+                    onTap: () => Navigator.push(context, motionRoute(const GoogleIntegrationScreen())),
+                    child: Row(children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: .08),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Text('G', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Google & Classroom', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+                          const SizedBox(height: 3),
+                          Text(
+                            google.account == null
+                                ? 'Login opcional, importação de turmas, atividades e status de entrega.'
+                                : '${google.account!.email} • ${google.account!.classroomConnected ? 'Classroom conectado' : 'Classroom não conectado'}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ]),
+                      ),
+                      const Icon(Icons.chevron_right_rounded),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 13),
                 SoftCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -103,25 +139,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 6),
                       Text('Esses valores definem quando o app mostra um alerta de risco.', style: Theme.of(context).textTheme.bodySmall),
                       const SizedBox(height: 13),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: minGrade,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(labelText: 'Média mínima'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: minAttendance,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(labelText: 'Frequência mínima (%)'),
-                            ),
-                          ),
-                        ],
-                      ),
+                      Row(children: [
+                        Expanded(child: TextField(controller: minGrade, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Média mínima'))),
+                        const SizedBox(width: 10),
+                        Expanded(child: TextField(controller: minAttendance, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Frequência mínima (%)'))),
+                      ]),
                       const SizedBox(height: 14),
                       Align(
                         alignment: Alignment.centerRight,
@@ -155,49 +177,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 13),
                 SoftCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.shield_outlined, color: AppColors.gold),
-                          SizedBox(width: 8),
-                          Text('Dados locais', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
-                        ],
-                      ),
-                      const SizedBox(height: 7),
-                      Text('As informações do app ficam armazenadas localmente no banco SQLite do aparelho. Limpar os dados do aplicativo ou desinstalá-lo remove esse banco.', style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5)),
-                    ],
-                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Row(children: [
+                      Icon(Icons.shield_outlined, color: AppColors.gold),
+                      SizedBox(width: 8),
+                      Text('Dados locais', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+                    ]),
+                    const SizedBox(height: 7),
+                    Text('Matérias, tarefas, notas e rotina continuam no SQLite do aparelho. A conexão Google é opcional e serve para importar/sincronizar dados do Classroom.', style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.5)),
+                  ]),
                 ),
                 const SizedBox(height: 13),
                 SoftCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Zona de segurança', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.w900, fontSize: 17)),
-                      const SizedBox(height: 6),
-                      Text('Use estas opções apenas quando quiser começar um semestre do zero ou redefinir completamente o aplicativo.', style: Theme.of(context).textTheme.bodySmall),
-                      const SizedBox(height: 14),
-                      Wrap(
-                        spacing: 9,
-                        runSpacing: 9,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () => _clearAcademic(context, state),
-                            icon: const Icon(Icons.cleaning_services_outlined),
-                            label: const Text('Apagar dados acadêmicos'),
-                          ),
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-                            onPressed: () => _resetEverything(context, state),
-                            icon: const Icon(Icons.delete_forever_outlined),
-                            label: const Text('Redefinir aplicativo'),
-                          ),
-                        ],
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Zona de segurança', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.w900, fontSize: 17)),
+                    const SizedBox(height: 6),
+                    Text('Use estas opções apenas quando quiser começar um semestre do zero ou redefinir completamente o aplicativo.', style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 14),
+                    Wrap(spacing: 9, runSpacing: 9, children: [
+                      OutlinedButton.icon(onPressed: () => _clearAcademic(context, state), icon: const Icon(Icons.cleaning_services_outlined), label: const Text('Apagar dados acadêmicos')),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+                        onPressed: () => _resetEverything(context, state),
+                        icon: const Icon(Icons.delete_forever_outlined),
+                        label: const Text('Redefinir aplicativo'),
                       ),
-                    ],
-                  ),
+                    ]),
+                  ]),
                 ),
               ],
             ),
@@ -212,7 +218,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Apagar dados acadêmicos?'),
-            content: const Text('Matérias, atividades, notas, horários e anotações serão apagados. Seu perfil e preferências serão mantidos.'),
+            content: const Text('Matérias, atividades, notas, horários e anotações serão apagados. Seu perfil, conta Google e preferências serão mantidos.'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
               FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Apagar dados')),
@@ -222,37 +228,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
         false;
     if (!ok) return;
     await state.clearAcademicData();
+    await GoogleIntegrationController.instance.reloadLinks();
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dados acadêmicos apagados.')));
   }
 
   Future<void> _resetEverything(BuildContext context, AppState state) async {
-    final controller = TextEditingController();
+    final text = TextEditingController();
     final ok = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Redefinir aplicativo?'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Tudo será apagado, inclusive perfil e configurações. Digite APAGAR para confirmar.'),
-                const SizedBox(height: 12),
-                TextField(controller: controller, decoration: const InputDecoration(hintText: 'APAGAR')),
-              ],
-            ),
+            content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Tudo será apagado, inclusive perfil, conexão Google e configurações. Digite APAGAR para confirmar.'),
+              const SizedBox(height: 12),
+              TextField(controller: text, decoration: const InputDecoration(hintText: 'APAGAR')),
+            ]),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-                onPressed: () => Navigator.pop(dialogContext, controller.text.trim().toUpperCase() == 'APAGAR'),
+                onPressed: () => Navigator.pop(dialogContext, text.text.trim().toUpperCase() == 'APAGAR'),
                 child: const Text('Redefinir'),
               ),
             ],
           ),
         ) ??
         false;
-    controller.dispose();
+    text.dispose();
     if (!ok) return;
+    await GoogleIntegrationController.instance.clearLocalIntegration();
     await state.resetEverything();
     if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst);
   }

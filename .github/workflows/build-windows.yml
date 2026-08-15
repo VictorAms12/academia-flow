@@ -47,16 +47,20 @@ jobs:
         run: flutter test
 
       - name: Build Windows release
-        run: flutter build windows --release
+        shell: pwsh
+        env:
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: flutter build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="$env:GOOGLE_DESKTOP_CLIENT_ID" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$env:GOOGLE_DESKTOP_CLIENT_SECRET"
 
       - name: Package portable build
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath academia-flow-windows-v2.4-academic-routine.zip -Force
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath academia-flow-windows-v2.5-google-integration.zip -Force
 
       - name: Upload Windows portable app
         uses: actions/upload-artifact@v4
         with:
-          name: academia-flow-windows-v2.4-academic-routine
-          path: academia-flow-windows-v2.4-academic-routine.zip
+          name: academia-flow-windows-v2.5-google-integration
+          path: academia-flow-windows-v2.5-google-integration.zip
           if-no-files-found: error
           retention-days: 30
