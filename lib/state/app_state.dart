@@ -33,6 +33,9 @@ class AppState extends ChangeNotifier {
   List<AcademicNote> notes = [];
   List<MaterialResource> materials = [];
 
+  final Map<int, int> _baselineTotalClasses = {};
+  final Map<int, int> _baselineAbsences = {};
+
   bool get onboardingComplete => userName.trim().isNotEmpty && course.trim().isNotEmpty;
 
   Future<void> initialize() async {
@@ -59,7 +62,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> reloadAll({bool notify = true}) async {
-    subjects = await _db.getSubjects();
+    final rawSubjects = await _db.getSubjects();
+    _captureSubjectBaselines(rawSubjects);
+    subjects = rawSubjects;
     tasks = await _db.getTasks();
     grades = await _db.getGrades();
     schedules = await _db.getSchedules();
@@ -67,7 +72,36 @@ class AppState extends ChangeNotifier {
     calendarEvents = await _db.getCalendarEvents();
     notes = await _db.getNotes();
     materials = await _db.getMaterials();
+    _projectAttendanceIntoSubjects();
     if (notify) notifyListeners();
+  }
+
+  void _captureSubjectBaselines(List<Subject> raw) {
+    _baselineTotalClasses
+      ..clear()
+      ..addEntries(raw.where((s) => s.id != null).map((s) => MapEntry(s.id!, s.totalClasses)));
+    _baselineAbsences
+      ..clear()
+      ..addEntries(raw.where((s) => s.id != null).map((s) => MapEntry(s.id!, s.absences)));
+  }
+
+  void _projectAttendanceIntoSubjects() {
+    subjects = subjects.map((subject) {
+      if (subject.id == null) return subject;
+      final baseTotal = _baselineTotalClasses[subject.id!] ?? subject.totalClasses;
+      final baseAbsences = _baselineAbsences[subject.id!] ?? subject.absences;
+      final resolved = sessionsForSubject(subject.id!).where(
+        (s) => s.status == AttendanceStatus.present || s.status == AttendanceStatus.absent,
+      );
+      final sessionTotal = resolved.fold<int>(0, (v, s) => v + s.classCount);
+      final sessionAbsences = resolved
+          .where((s) => s.status == AttendanceStatus.absent)
+          .fold<int>(0, (v, s) => v + s.classCount);
+      return subject.copyWith(
+        totalClasses: baseTotal + sessionTotal,
+        absences: baseAbsences + sessionAbsences,
+      );
+    }).toList();
   }
 
   Future<void> saveProfile({required String name, required String courseName, required String periodName, required String semesterName}) async {
@@ -113,6 +147,9 @@ class AppState extends ChangeNotifier {
       _db.setSetting('end_class_actions', '$endClassActionsEnabled'),
       _db.setSetting('attendance_streak', '$streakEnabled'),
     ]);
+    if (classRemindersEnabled || attendanceCheckInEnabled || endPendingReminderEnabled || endClassActionsEnabled) {
+      await notifications.requestPermission();
+    }
     await _rescheduleNotifications();
     notifyListeners();
   }
@@ -157,6 +194,30 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  AcademicTask? _taskById(int? id) {
+    if (id == null) return null;
+    for (final item in tasks) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  AcademicNote? _noteById(int? id) {
+    if (id == null) return null;
+    for (final item in notes) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  MaterialResource? _materialById(int? id) {
+    if (id == null) return null;
+    for (final item in materials) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
   String subjectName(int? id) => subjectById(id)?.name ?? 'Sem matéria';
   List<AcademicTask> tasksForSubject(int id) => tasks.where((e) => e.subjectId == id).toList();
   List<Grade> gradesForSubject(int id) => grades.where((e) => e.subjectId == id).toList();
@@ -181,40 +242,20 @@ class AppState extends ChangeNotifier {
     return values.isEmpty ? null : values.reduce((a, b) => a + b) / values.length;
   }
 
-  double attendanceForSubject(Subject subject) {
-    if (subject.id == null) return subject.attendance;
-    final resolved = sessionsForSubject(subject.id!).where((s) => s.status == AttendanceStatus.present || s.status == AttendanceStatus.absent).toList();
-    if (resolved.isEmpty) return subject.attendance;
-    final total = resolved.fold<int>(0, (v, s) => v + s.classCount);
-    if (total <= 0) return 100;
-    final misses = resolved.where((s) => s.status == AttendanceStatus.absent).fold<int>(0, (v, s) => v + s.classCount);
-    return ((total - misses) / total) * 100;
-  }
+  double attendanceForSubject(Subject subject) => subject.attendance;
 
   double? get averageAttendance {
     if (subjects.isEmpty) return null;
-    return subjects.fold<double>(0, (a, b) => a + attendanceForSubject(b)) / subjects.length;
+    return subjects.fold<double>(0, (a, b) => a + b.attendance) / subjects.length;
   }
 
   double attendanceTarget(Subject subject) => subject.minAttendance ?? minAttendance;
-
-  int completedClassCount(Subject subject) {
-    if (subject.id == null) return subject.totalClasses;
-    final resolved = sessionsForSubject(subject.id!).where((s) => s.status == AttendanceStatus.present || s.status == AttendanceStatus.absent).toList();
-    if (resolved.isEmpty) return subject.totalClasses;
-    return resolved.fold<int>(0, (v, s) => v + s.classCount);
-  }
-
-  int absenceCount(Subject subject) {
-    if (subject.id == null) return subject.absences;
-    final resolved = sessionsForSubject(subject.id!).where((s) => s.status == AttendanceStatus.absent).toList();
-    if (sessionsForSubject(subject.id!).where((s) => s.status == AttendanceStatus.present || s.status == AttendanceStatus.absent).isEmpty) return subject.absences;
-    return resolved.fold<int>(0, (v, s) => v + s.classCount);
-  }
+  int completedClassCount(Subject subject) => subject.totalClasses;
+  int absenceCount(Subject subject) => subject.absences;
 
   bool isSubjectAtRisk(Subject s) {
     final avg = s.id == null ? null : averageForSubject(s.id!);
-    return (avg != null && avg < minGrade) || attendanceForSubject(s) < attendanceTarget(s) || remainingAbsences(s) <= 1;
+    return (avg != null && avg < minGrade) || s.attendance < attendanceTarget(s) || remainingAbsences(s) <= 1;
   }
 
   int maxAbsences(Subject s) {
@@ -225,12 +266,12 @@ class AppState extends ChangeNotifier {
 
   int remainingAbsences(Subject s) {
     final max = maxAbsences(s);
-    return max < 0 ? 9999 : (max - absenceCount(s)).clamp(0, 9999).toInt();
+    return max < 0 ? 9999 : (max - s.absences).clamp(0, 9999).toInt();
   }
 
   double simulatedAttendance(Subject subject, int additionalAbsences) {
-    final currentTotal = completedClassCount(subject);
-    final currentMisses = absenceCount(subject);
+    final currentTotal = subject.totalClasses;
+    final currentMisses = subject.absences;
     final futureTotal = currentTotal + additionalAbsences;
     if (futureTotal <= 0) return 100;
     return ((futureTotal - currentMisses - additionalAbsences).clamp(0, futureTotal) / futureTotal) * 100;
@@ -238,8 +279,7 @@ class AppState extends ChangeNotifier {
 
   String attendanceRiskLabel(Subject subject) {
     final remaining = remainingAbsences(subject);
-    final attendance = attendanceForSubject(subject);
-    if (attendance < attendanceTarget(subject) || remaining == 0) return 'LIMITE';
+    if (subject.attendance < attendanceTarget(subject) || remaining == 0) return 'LIMITE';
     if (remaining == 1) return 'RISCO';
     if (remaining <= 3) return 'ATENÇÃO';
     return 'SEGURO';
@@ -261,7 +301,8 @@ class AppState extends ChangeNotifier {
     return tasks.where((t) => t.status != TaskStatus.done && _sameDay(t.dueDate, n)).toList();
   }
 
-  List<ScheduleEntry> get classesToday => (schedules.where((s) => s.day == DateTime.now().weekday).toList()..sort((a, b) => a.start.compareTo(b.start)));
+  List<ScheduleEntry> get classesToday =>
+      (schedules.where((s) => s.day == DateTime.now().weekday).toList()..sort((a, b) => a.start.compareTo(b.start)));
 
   List<ClassSession> sessionsForDate(DateTime date) =>
       (classSessions.where((s) => _sameDay(s.date, date)).toList()..sort((a, b) => a.start.compareTo(b.start)));
@@ -320,15 +361,47 @@ class AppState extends ChangeNotifier {
     return done / tasks.length * 100;
   }
 
-  Future<Subject> saveSubject(Subject item) async {
+  Future<Subject> saveSubject(Subject item, {bool preserveRoutineFields = true}) async {
+    final existing = subjectById(item.id);
+    if (existing != null) {
+      final resolved = sessionsForSubject(existing.id!).where(
+        (s) => s.status == AttendanceStatus.present || s.status == AttendanceStatus.absent,
+      );
+      final sessionTotal = resolved.fold<int>(0, (v, s) => v + s.classCount);
+      final sessionAbsences = resolved
+          .where((s) => s.status == AttendanceStatus.absent)
+          .fold<int>(0, (v, s) => v + s.classCount);
+      item = item.copyWith(
+        totalClasses: (item.totalClasses - sessionTotal).clamp(0, 9999).toInt(),
+        absences: (item.absences - sessionAbsences).clamp(0, 9999).toInt(),
+        plannedClasses: preserveRoutineFields && item.plannedClasses == 0 && existing.plannedClasses > 0
+            ? existing.plannedClasses
+            : item.plannedClasses,
+        minAttendance: preserveRoutineFields ? item.minAttendance ?? existing.minAttendance : item.minAttendance,
+      );
+    }
     final saved = await _db.saveSubject(item);
-    subjects = await _db.getSubjects();
+    final rawSubjects = await _db.getSubjects();
+    _captureSubjectBaselines(rawSubjects);
+    subjects = rawSubjects;
+    _projectAttendanceIntoSubjects();
     notifyListeners();
-    return saved;
+    return subjectById(saved.id) ?? saved;
+  }
+
+  Future<void> setSubjectAttendancePlan(Subject subject, {required int plannedClasses, required double? target}) async {
+    await saveSubject(
+      subject.copyWith(
+        plannedClasses: plannedClasses.clamp(0, 9999).toInt(),
+        minAttendance: target,
+        clearMinAttendance: target == null,
+      ),
+      preserveRoutineFields: false,
+    );
   }
 
   Future<void> setSubjectAttendanceTarget(Subject subject, double? value) async {
-    await saveSubject(subject.copyWith(minAttendance: value, clearMinAttendance: value == null));
+    await setSubjectAttendancePlan(subject, plannedClasses: subject.plannedClasses, target: value);
   }
 
   Future<void> deleteSubject(Subject item) async {
@@ -339,6 +412,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<AcademicTask> saveTask(AcademicTask item) async {
+    final previous = _taskById(item.id);
+    if (item.id != null && item.sessionId == null && previous?.sessionId != null) {
+      item = item.copyWith(sessionId: previous!.sessionId);
+    }
     final saved = await _db.saveTask(item);
     tasks = await _db.getTasks();
     await notifications.scheduleTask(saved, subjectName(saved.subjectId));
@@ -381,13 +458,21 @@ class AppState extends ChangeNotifier {
     final v = await _db.saveSchedule(item);
     schedules = await _db.getSchedules();
     await ensureRoutineSessions(notify: false);
+    if (classRemindersEnabled || attendanceCheckInEnabled || endPendingReminderEnabled || endClassActionsEnabled) {
+      await notifications.requestPermission();
+    }
     await _rescheduleNotifications();
     notifyListeners();
     return v;
   }
 
   Future<void> updateScheduleRoutine(ScheduleEntry item, {required int classCount, required int reminderMinutes}) async {
-    await saveSchedule(item.copyWith(classCount: classCount.clamp(1, 8), reminderMinutes: reminderMinutes.clamp(0, 120)));
+    await saveSchedule(
+      item.copyWith(
+        classCount: classCount.clamp(1, 8).toInt(),
+        reminderMinutes: reminderMinutes.clamp(0, 120).toInt(),
+      ),
+    );
   }
 
   Future<void> deleteSchedule(ScheduleEntry item) async {
@@ -396,6 +481,7 @@ class AppState extends ChangeNotifier {
     await _db.deleteSchedule(item.id!);
     schedules = await _db.getSchedules();
     classSessions = await _db.getClassSessions();
+    _projectAttendanceIntoSubjects();
     await _rescheduleNotifications();
     notifyListeners();
   }
@@ -403,6 +489,7 @@ class AppState extends ChangeNotifier {
   Future<void> ensureRoutineSessions({bool notify = true}) async {
     if (schedules.isEmpty) {
       classSessions = await _db.getClassSessions();
+      _projectAttendanceIntoSubjects();
       if (notify) notifyListeners();
       return;
     }
@@ -413,8 +500,8 @@ class AppState extends ChangeNotifier {
         if (s.scheduleId != null) '${s.scheduleId}:${_dateKey(s.date)}',
     };
     final today = DateTime.now();
-    final start = DateTime(today.year, today.month, today.day).subtract(const Duration(days: 14));
-    final end = start.add(const Duration(days: 75));
+    final start = DateTime(today.year, today.month, today.day);
+    final end = start.add(const Duration(days: 61));
     for (var date = start; !date.isAfter(end); date = date.add(const Duration(days: 1))) {
       for (final schedule in schedules.where((s) => s.day == date.weekday)) {
         if (schedule.id == null || existing.contains('${schedule.id}:${_dateKey(date)}')) continue;
@@ -435,6 +522,7 @@ class AppState extends ChangeNotifier {
       }
     }
     classSessions = await _db.getClassSessions();
+    _projectAttendanceIntoSubjects();
     if (notify) notifyListeners();
   }
 
@@ -445,6 +533,7 @@ class AppState extends ChangeNotifier {
   Future<ClassSession> saveClassSession(ClassSession item) async {
     final saved = await _db.saveClassSession(item);
     classSessions = await _db.getClassSessions();
+    _projectAttendanceIntoSubjects();
     await _rescheduleNotifications();
     notifyListeners();
     return saved;
@@ -456,6 +545,19 @@ class AppState extends ChangeNotifier {
     await _db.saveClassSession(updated);
     await notifications.cancelClassSession(session.id!);
     classSessions = await _db.getClassSessions();
+    _projectAttendanceIntoSubjects();
+
+    if (status != AttendanceStatus.cancelled && endClassActionsEnabled && updated.endsAt.isAfter(DateTime.now())) {
+      await notifications.scheduleClassSession(
+        updated,
+        subjectName(updated.subjectId),
+        reminderMinutes: 0,
+        classRemindersEnabled: false,
+        attendanceCheckInEnabled: false,
+        endPendingReminderEnabled: false,
+        endClassActionsEnabled: true,
+      );
+    }
     notifyListeners();
   }
 
@@ -464,6 +566,7 @@ class AppState extends ChangeNotifier {
     await notifications.cancelClassSession(session.id!);
     await _db.deleteClassSession(session.id!);
     classSessions = await _db.getClassSessions();
+    _projectAttendanceIntoSubjects();
     notifyListeners();
   }
 
@@ -471,7 +574,12 @@ class AppState extends ChangeNotifier {
     final saved = await _db.saveCalendarEvent(item);
     calendarEvents = await _db.getCalendarEvents();
     if (saved.blocksClasses) {
-      final impacted = classSessions.where((s) => s.kind == ClassSessionKind.regular && s.status == AttendanceStatus.pending && _sameDay(s.date, saved.date) && (saved.subjectId == null || saved.subjectId == s.subjectId)).toList();
+      final impacted = classSessions.where(
+        (s) => s.kind == ClassSessionKind.regular &&
+            s.status == AttendanceStatus.pending &&
+            _sameDay(s.date, saved.date) &&
+            (saved.subjectId == null || saved.subjectId == s.subjectId),
+      ).toList();
       for (final s in impacted) {
         if (s.id != null) await _db.deleteClassSession(s.id!);
       }
@@ -492,6 +600,20 @@ class AppState extends ChangeNotifier {
   }
 
   Future<AcademicNote> saveNote(AcademicNote item) async {
+    final previous = _noteById(item.id);
+    if (item.id != null && item.sessionId == null && previous?.sessionId != null) {
+      item = AcademicNote(
+        id: item.id,
+        subjectId: item.subjectId,
+        title: item.title,
+        content: item.content,
+        link: item.link,
+        tags: item.tags,
+        pinned: item.pinned,
+        createdAt: item.createdAt,
+        sessionId: previous!.sessionId,
+      );
+    }
     final v = await _db.saveNote(item);
     notes = await _db.getNotes();
     notifyListeners();
@@ -506,6 +628,19 @@ class AppState extends ChangeNotifier {
   }
 
   Future<MaterialResource> saveMaterial(MaterialResource item) async {
+    final previous = _materialById(item.id);
+    if (item.id != null && item.sessionId == null && previous?.sessionId != null) {
+      item = MaterialResource(
+        id: item.id,
+        subjectId: item.subjectId,
+        title: item.title,
+        url: item.url,
+        description: item.description,
+        kind: item.kind,
+        createdAt: item.createdAt,
+        sessionId: previous!.sessionId,
+      );
+    }
     final v = await _db.saveMaterial(item);
     materials = await _db.getMaterials();
     notifyListeners();

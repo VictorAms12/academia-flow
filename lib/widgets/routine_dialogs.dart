@@ -49,33 +49,59 @@ Future<void> showScheduleRoutineConfig(BuildContext context, AppState state, Sch
 Future<void> showAttendanceTargetEditor(BuildContext context, AppState state, Subject subject) async {
   double target = state.attendanceTarget(subject);
   bool useGlobal = subject.minAttendance == null;
+  final planned = TextEditingController(text: subject.plannedClasses > 0 ? '${subject.plannedClasses}' : '');
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setLocal) => AlertDialog(
-        title: Text('Frequência mínima • ${subject.name}'),
+        title: Text('Planejamento de frequência • ${subject.name}'),
         content: SizedBox(
-          width: 430,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: useGlobal,
-              title: Text('Usar regra global (${state.minAttendance.toStringAsFixed(0)}%)'),
-              onChanged: (v) => setLocal(() {
-                useGlobal = v;
-                if (v) target = state.minAttendance;
-              }),
-            ),
-            if (!useGlobal) ...[
-              Slider(value: target.clamp(50, 100), min: 50, max: 100, divisions: 50, label: '${target.toStringAsFixed(0)}%', onChanged: (v) => setLocal(() => target = v)),
-              Text('${target.toStringAsFixed(0)}% de frequência mínima', style: Theme.of(context).textTheme.titleMedium),
-            ],
-          ]),
+          width: 450,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextFormField(
+                controller: planned,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Total de aulas planejadas no semestre',
+                  hintText: 'Ex.: 80',
+                  helperText: 'Necessário para calcular quantas faltas ainda são permitidas.',
+                ),
+              ),
+              const SizedBox(height: 10),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: useGlobal,
+                title: Text('Usar regra global (${state.minAttendance.toStringAsFixed(0)}%)'),
+                onChanged: (v) => setLocal(() {
+                  useGlobal = v;
+                  if (v) target = state.minAttendance;
+                }),
+              ),
+              if (!useGlobal) ...[
+                Slider(value: target.clamp(50, 100).toDouble(), min: 50, max: 100, divisions: 50, label: '${target.toStringAsFixed(0)}%', onChanged: (v) => setLocal(() => target = v)),
+                Text('${target.toStringAsFixed(0)}% de frequência mínima', style: Theme.of(context).textTheme.titleMedium),
+              ],
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Histórico anterior: ${subject.totalClasses} aulas e ${subject.absences} faltas. A automação soma as novas confirmações a esse histórico.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ]),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
           FilledButton(onPressed: () async {
-            await state.setSubjectAttendanceTarget(subject, useGlobal ? null : target);
+            final plannedClasses = int.tryParse(planned.text.trim()) ?? 0;
+            await state.setSubjectAttendancePlan(
+              subject,
+              plannedClasses: plannedClasses,
+              target: useGlobal ? null : target,
+            );
             if (dialogContext.mounted) Navigator.pop(dialogContext);
           }, child: const Text('Salvar')),
         ],
