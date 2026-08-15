@@ -13,7 +13,7 @@ class AppDatabase {
     final path = p.join(base, 'academia_flow_v2.db');
     _database = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -30,7 +30,47 @@ class AppDatabase {
       room TEXT NOT NULL DEFAULT '',
       total_classes INTEGER NOT NULL DEFAULT 0,
       planned_classes INTEGER NOT NULL DEFAULT 0,
-      absences INTEGER NOT NULL DEFAULT 0
+      absences INTEGER NOT NULL DEFAULT 0,
+      min_attendance REAL
+    )''');
+    await db.execute('''CREATE TABLE schedules(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_id INTEGER NOT NULL,
+      day INTEGER NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      room TEXT NOT NULL DEFAULT '',
+      class_count INTEGER NOT NULL DEFAULT 1,
+      reminder_minutes INTEGER NOT NULL DEFAULT 10,
+      FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+    )''');
+    await db.execute('''CREATE TABLE class_sessions(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      subject_id INTEGER NOT NULL,
+      schedule_id INTEGER,
+      date TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      room TEXT NOT NULL DEFAULT '',
+      class_count INTEGER NOT NULL DEFAULT 1,
+      status INTEGER NOT NULL DEFAULT 0,
+      kind INTEGER NOT NULL DEFAULT 0,
+      note TEXT NOT NULL DEFAULT '',
+      makeup_for_session_id INTEGER,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
+      FOREIGN KEY(schedule_id) REFERENCES schedules(id) ON DELETE SET NULL,
+      FOREIGN KEY(makeup_for_session_id) REFERENCES class_sessions(id) ON DELETE SET NULL
+    )''');
+    await db.execute('CREATE UNIQUE INDEX idx_class_session_schedule_date ON class_sessions(schedule_id, date) WHERE schedule_id IS NOT NULL');
+    await db.execute('''CREATE TABLE academic_calendar(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      title TEXT NOT NULL,
+      kind INTEGER NOT NULL DEFAULT 4,
+      subject_id INTEGER,
+      blocks_classes INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
     )''');
     await db.execute('''CREATE TABLE tasks(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +84,7 @@ class AppDatabase {
       description TEXT NOT NULL DEFAULT '',
       checklist TEXT NOT NULL DEFAULT '[]',
       completed_steps TEXT NOT NULL DEFAULT '[]',
+      session_id INTEGER,
       FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL
     )''');
     await db.execute('''CREATE TABLE grades(
@@ -55,15 +96,6 @@ class AppDatabase {
       date TEXT NOT NULL,
       FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
     )''');
-    await db.execute('''CREATE TABLE schedules(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      subject_id INTEGER NOT NULL,
-      day INTEGER NOT NULL,
-      start_time TEXT NOT NULL,
-      end_time TEXT NOT NULL,
-      room TEXT NOT NULL DEFAULT '',
-      FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
-    )''');
     await db.execute('''CREATE TABLE notes(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       subject_id INTEGER,
@@ -73,6 +105,7 @@ class AppDatabase {
       tags TEXT NOT NULL DEFAULT '',
       pinned INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
+      session_id INTEGER,
       FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL
     )''');
     await db.execute('''CREATE TABLE materials(
@@ -83,6 +116,7 @@ class AppDatabase {
       description TEXT NOT NULL DEFAULT '',
       kind INTEGER NOT NULL DEFAULT 2,
       created_at TEXT NOT NULL,
+      session_id INTEGER,
       FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
     )''');
   }
@@ -102,6 +136,42 @@ class AppDatabase {
         description TEXT NOT NULL DEFAULT '',
         kind INTEGER NOT NULL DEFAULT 2,
         created_at TEXT NOT NULL,
+        FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
+      )''');
+    }
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE subjects ADD COLUMN min_attendance REAL');
+      await db.execute('ALTER TABLE schedules ADD COLUMN class_count INTEGER NOT NULL DEFAULT 1');
+      await db.execute('ALTER TABLE schedules ADD COLUMN reminder_minutes INTEGER NOT NULL DEFAULT 10');
+      await db.execute('ALTER TABLE tasks ADD COLUMN session_id INTEGER');
+      await db.execute('ALTER TABLE notes ADD COLUMN session_id INTEGER');
+      await db.execute('ALTER TABLE materials ADD COLUMN session_id INTEGER');
+      await db.execute('''CREATE TABLE IF NOT EXISTS class_sessions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subject_id INTEGER NOT NULL,
+        schedule_id INTEGER,
+        date TEXT NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        room TEXT NOT NULL DEFAULT '',
+        class_count INTEGER NOT NULL DEFAULT 1,
+        status INTEGER NOT NULL DEFAULT 0,
+        kind INTEGER NOT NULL DEFAULT 0,
+        note TEXT NOT NULL DEFAULT '',
+        makeup_for_session_id INTEGER,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE,
+        FOREIGN KEY(schedule_id) REFERENCES schedules(id) ON DELETE SET NULL,
+        FOREIGN KEY(makeup_for_session_id) REFERENCES class_sessions(id) ON DELETE SET NULL
+      )''');
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_class_session_schedule_date ON class_sessions(schedule_id, date) WHERE schedule_id IS NOT NULL');
+      await db.execute('''CREATE TABLE IF NOT EXISTS academic_calendar(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        title TEXT NOT NULL,
+        kind INTEGER NOT NULL DEFAULT 4,
+        subject_id INTEGER,
+        blocks_classes INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE CASCADE
       )''');
     }
@@ -153,19 +223,51 @@ class AppDatabase {
     final db = await database;
     if (item.id == null) {
       final id = await db.insert('schedules', item.toMap());
-      return ScheduleEntry(id: id, subjectId: item.subjectId, day: item.day, start: item.start, end: item.end, room: item.room);
+      return item.copyWith(id: id);
     }
     await db.update('schedules', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
     return item;
   }
   Future<void> deleteSchedule(int id) async => (await database).delete('schedules', where: 'id = ?', whereArgs: [id]);
 
+  Future<List<ClassSession>> getClassSessions() async => (await (await database).query('class_sessions', orderBy: 'date ASC, start_time ASC')).map(ClassSession.fromMap).toList();
+  Future<ClassSession> saveClassSession(ClassSession item) async {
+    final db = await database;
+    if (item.id == null) {
+      final id = await db.insert('class_sessions', item.toMap(), conflictAlgorithm: ConflictAlgorithm.ignore);
+      if (id == 0 && item.scheduleId != null) {
+        final rows = await db.query('class_sessions', where: 'schedule_id = ? AND date = ?', whereArgs: [item.scheduleId, _dateKey(item.date)], limit: 1);
+        if (rows.isNotEmpty) return ClassSession.fromMap(rows.first);
+      }
+      return item.copyWith(id: id);
+    }
+    await db.update('class_sessions', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
+    return item;
+  }
+  Future<void> deleteClassSession(int id) async => (await database).delete('class_sessions', where: 'id = ?', whereArgs: [id]);
+  Future<void> deleteFutureSessionsForSchedule(int scheduleId, DateTime from) async {
+    await (await database).delete(
+      'class_sessions',
+      where: 'schedule_id = ? AND status = ? AND date >= ?',
+      whereArgs: [scheduleId, AttendanceStatus.pending.index, _dateKey(from)],
+    );
+  }
+
+  Future<List<AcademicCalendarEvent>> getCalendarEvents() async => (await (await database).query('academic_calendar', orderBy: 'date ASC')).map(AcademicCalendarEvent.fromMap).toList();
+  Future<AcademicCalendarEvent> saveCalendarEvent(AcademicCalendarEvent item) async {
+    final db = await database;
+    if (item.id == null) return item.copyWith(id: await db.insert('academic_calendar', item.toMap()));
+    await db.update('academic_calendar', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
+    return item;
+  }
+  Future<void> deleteCalendarEvent(int id) async => (await database).delete('academic_calendar', where: 'id = ?', whereArgs: [id]);
+
   Future<List<AcademicNote>> getNotes() async => (await (await database).query('notes', orderBy: 'pinned DESC, created_at DESC')).map(AcademicNote.fromMap).toList();
   Future<AcademicNote> saveNote(AcademicNote item) async {
     final db = await database;
     if (item.id == null) {
       final id = await db.insert('notes', item.toMap());
-      return AcademicNote(id: id, subjectId: item.subjectId, title: item.title, content: item.content, link: item.link, tags: item.tags, pinned: item.pinned, createdAt: item.createdAt);
+      return AcademicNote(id: id, subjectId: item.subjectId, title: item.title, content: item.content, link: item.link, tags: item.tags, pinned: item.pinned, createdAt: item.createdAt, sessionId: item.sessionId);
     }
     await db.update('notes', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
     return item;
@@ -177,7 +279,7 @@ class AppDatabase {
     final db = await database;
     if (item.id == null) {
       final id = await db.insert('materials', item.toMap());
-      return MaterialResource(id: id, subjectId: item.subjectId, title: item.title, url: item.url, description: item.description, kind: item.kind, createdAt: item.createdAt);
+      return MaterialResource(id: id, subjectId: item.subjectId, title: item.title, url: item.url, description: item.description, kind: item.kind, createdAt: item.createdAt, sessionId: item.sessionId);
     }
     await db.update('materials', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
     return item;
@@ -188,10 +290,12 @@ class AppDatabase {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('grades');
-      await txn.delete('schedules');
       await txn.delete('materials');
       await txn.delete('notes');
       await txn.delete('tasks');
+      await txn.delete('class_sessions');
+      await txn.delete('academic_calendar');
+      await txn.delete('schedules');
       await txn.delete('subjects');
     });
   }
@@ -200,12 +304,17 @@ class AppDatabase {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('grades');
-      await txn.delete('schedules');
       await txn.delete('materials');
       await txn.delete('notes');
       await txn.delete('tasks');
+      await txn.delete('class_sessions');
+      await txn.delete('academic_calendar');
+      await txn.delete('schedules');
       await txn.delete('subjects');
       await txn.delete('settings');
     });
   }
 }
+
+String _dateKey(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
