@@ -78,12 +78,15 @@ class _SubjectsScreenState extends State<SubjectsScreen> {
                         mainAxisSpacing: 13,
                         childAspectRatio: cols == 1 ? 1.8 : 1.14,
                       ),
-                      itemBuilder: (_, i) => MotionEntrance(
-                        key: ValueKey(filtered[i].id ?? filtered[i].name),
-                        delay: Duration(milliseconds: (i.clamp(0, 7)) * 38),
-                        offset: const Offset(0, .06),
-                        child: _SubjectCard(state: state, subject: filtered[i]),
-                      ),
+                      itemBuilder: (_, i) {
+                        final staggerIndex = i > 7 ? 7 : i;
+                        return MotionEntrance(
+                          key: ValueKey(filtered[i].id ?? filtered[i].name),
+                          delay: Duration(milliseconds: staggerIndex * 38),
+                          offset: const Offset(0, .06),
+                          child: _SubjectCard(state: state, subject: filtered[i]),
+                        );
+                      },
                     );
                   },
                 ),
