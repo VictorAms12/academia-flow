@@ -458,7 +458,7 @@ class _ChecklistRow extends StatelessWidget {
                       ? Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: .55)
                       : Theme.of(context).textTheme.bodyMedium?.color,
                   fontSize: 12,
-                  fontWeight: checked ? FontWeight.w500 : FontWeight.w650,
+                  fontWeight: checked ? FontWeight.w500 : FontWeight.w600,
                   decoration: checked ? TextDecoration.lineThrough : TextDecoration.none,
                 ),
                 child: Text(label),
