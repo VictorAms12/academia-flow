@@ -103,7 +103,7 @@ class MotionProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final target = value.clamp(0.0, 1.0);
+    final target = value.clamp(0.0, 1.0).toDouble();
     if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
       return LinearProgressIndicator(value: target, minHeight: minHeight, borderRadius: BorderRadius.circular(20));
     }
