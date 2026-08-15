@@ -452,6 +452,8 @@ Future<void> showScheduleEditor(
                   start: _formatTime(start),
                   end: _formatTime(end),
                   room: room.text.trim(),
+                  classCount: entry?.classCount ?? 1,
+                  reminderMinutes: entry?.reminderMinutes ?? 10,
                 ),
               );
               if (dialogContext.mounted) Navigator.pop(dialogContext);
