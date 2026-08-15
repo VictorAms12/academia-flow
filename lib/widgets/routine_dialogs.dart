@@ -5,6 +5,7 @@ import '../state/app_state.dart';
 Future<void> showScheduleRoutineConfig(BuildContext context, AppState state, ScheduleEntry entry) async {
   int classCount = entry.classCount;
   int reminder = entry.reminderMinutes;
+  bool saving = false;
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
@@ -17,7 +18,7 @@ Future<void> showScheduleRoutineConfig(BuildContext context, AppState state, Sch
               initialValue: classCount,
               decoration: const InputDecoration(labelText: 'Quantidade de aulas no bloco'),
               items: [for (var i = 1; i <= 6; i++) DropdownMenuItem(value: i, child: Text('$i aula${i == 1 ? '' : 's'}'))],
-              onChanged: (v) => setLocal(() => classCount = v ?? classCount),
+              onChanged: saving ? null : (v) => setLocal(() => classCount = v ?? classCount),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int>(
@@ -30,16 +31,36 @@ Future<void> showScheduleRoutineConfig(BuildContext context, AppState state, Sch
                 DropdownMenuItem(value: 15, child: Text('15 minutos antes')),
                 DropdownMenuItem(value: 30, child: Text('30 minutos antes')),
               ],
-              onChanged: (v) => setLocal(() => reminder = v ?? reminder),
+              onChanged: saving ? null : (v) => setLocal(() => reminder = v ?? reminder),
             ),
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
-          FilledButton(onPressed: () async {
-            await state.updateScheduleRoutine(entry, classCount: classCount, reminderMinutes: reminder);
-            if (dialogContext.mounted) Navigator.pop(dialogContext);
-          }, child: const Text('Salvar')),
+          TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: saving
+                ? null
+                : () async {
+                    setLocal(() => saving = true);
+                    try {
+                      await state.updateScheduleRoutine(entry, classCount: classCount, reminderMinutes: reminder);
+                      if (dialogContext.mounted) Navigator.pop(dialogContext);
+                    } catch (_) {
+                      if (!dialogContext.mounted) return;
+                      setLocal(() => saving = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Não foi possível salvar a automação deste bloco.')),
+                      );
+                    }
+                  },
+            child: saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Salvar'),
+          ),
         ],
       ),
     ),
