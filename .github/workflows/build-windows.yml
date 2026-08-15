@@ -51,13 +51,12 @@ jobs:
 
       - name: Package portable build
         shell: pwsh
-        run: |
-          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath academia-flow-windows-v2.2.1.zip -Force
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath academia-flow-windows-v2.3-motion.zip -Force
 
       - name: Upload Windows portable app
         uses: actions/upload-artifact@v4
         with:
-          name: academia-flow-windows-v2.2.1
-          path: academia-flow-windows-v2.2.1.zip
+          name: academia-flow-windows-v2.3-motion
+          path: academia-flow-windows-v2.3-motion.zip
           if-no-files-found: error
           retention-days: 30

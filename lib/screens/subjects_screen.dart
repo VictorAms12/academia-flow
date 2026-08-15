@@ -4,6 +4,7 @@ import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/forms.dart';
+import '../widgets/motion.dart';
 import 'subject_detail_screen.dart';
 
 class SubjectsScreen extends StatefulWidget {
@@ -40,9 +41,12 @@ class _SubjectsScreenState extends State<SubjectsScreen> {
               ),
               const SizedBox(height: 17),
               if (state.subjects.isNotEmpty) ...[
-                TextField(
-                  onChanged: (v) => setState(() => search = v),
-                  decoration: const InputDecoration(prefixIcon: Icon(Icons.search_rounded), hintText: 'Buscar matéria...'),
+                MotionEntrance(
+                  delay: const Duration(milliseconds: 60),
+                  child: TextField(
+                    onChanged: (v) => setState(() => search = v),
+                    decoration: const InputDecoration(prefixIcon: Icon(Icons.search_rounded), hintText: 'Buscar matéria...'),
+                  ),
                 ),
                 const SizedBox(height: 17),
               ],
@@ -74,7 +78,12 @@ class _SubjectsScreenState extends State<SubjectsScreen> {
                         mainAxisSpacing: 13,
                         childAspectRatio: cols == 1 ? 1.8 : 1.14,
                       ),
-                      itemBuilder: (_, i) => _SubjectCard(state: state, subject: filtered[i]),
+                      itemBuilder: (_, i) => MotionEntrance(
+                        key: ValueKey(filtered[i].id ?? filtered[i].name),
+                        delay: Duration(milliseconds: (i.clamp(0, 7)) * 38),
+                        offset: const Offset(0, .06),
+                        child: _SubjectCard(state: state, subject: filtered[i]),
+                      ),
                     );
                   },
                 ),
@@ -99,31 +108,37 @@ class _SubjectCard extends StatelessWidget {
 
     return SoftCard(
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => SubjectDetailScreen(subjectId: subject.id!)),
+        motionRoute(SubjectDetailScreen(subjectId: subject.id!)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                width: 49,
-                height: 49,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
-                  borderRadius: BorderRadius.circular(14),
+              Hero(
+                tag: 'subject-icon-${subject.id}',
+                child: Container(
+                  width: 49,
+                  height: 49,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.auto_stories_rounded),
                 ),
-                child: const Icon(Icons.auto_stories_rounded),
               ),
               const Spacer(),
-              if (risk)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  decoration: BoxDecoration(color: AppColors.danger.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)),
-                  child: const Text('ATENÇÃO', style: TextStyle(color: AppColors.danger, fontSize: 9, fontWeight: FontWeight.w900)),
-                )
-              else
-                const GoldBadge('ATIVA'),
+              AnimatedSwitcher(
+                duration: MotionSpec.fast,
+                child: risk
+                    ? Container(
+                        key: const ValueKey('risk'),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        decoration: BoxDecoration(color: AppColors.danger.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)),
+                        child: const Text('ATENÇÃO', style: TextStyle(color: AppColors.danger, fontSize: 9, fontWeight: FontWeight.w900)),
+                      )
+                    : const GoldBadge('ATIVA', key: ValueKey('active')),
+              ),
               PopupMenuButton<String>(
                 onSelected: (value) async {
                   if (value == 'edit') {
@@ -176,7 +191,10 @@ class _Stat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+        AnimatedSwitcher(
+          duration: MotionSpec.fast,
+          child: Text(value, key: ValueKey(value), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+        ),
         Text(label, style: Theme.of(context).textTheme.labelSmall),
       ],
     );
