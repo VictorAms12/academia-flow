@@ -48,10 +48,7 @@ jobs:
 
       - name: Build Windows release
         shell: pwsh
-        env:
-          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
-          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
-        run: flutter build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="$env:GOOGLE_DESKTOP_CLIENT_ID" --dart-define=GOOGLE_DESKTOP_CLIENT_SECRET="$env:GOOGLE_DESKTOP_CLIENT_SECRET"
+        run: flutter build windows --release --dart-define=GOOGLE_DESKTOP_CLIENT_ID="364193251767-1nnk8nqgdd1u1u93j5gnf9eevt4j5gka.apps.googleusercontent.com"
 
       - name: Package portable build
         shell: pwsh
