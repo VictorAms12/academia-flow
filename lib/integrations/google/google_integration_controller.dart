@@ -38,32 +38,15 @@ class GoogleIntegrationController extends ChangeNotifier {
     await _store.ensureSchema();
     account = await _store.getAccount();
 
-    // Se existe uma conta persistida, o Academia Flow deve lembrar que o
-    // usuário está conectado. A sessão/token do Google é revalidada somente
-    // quando uma operação online realmente precisar dela.
+    // Abrir a tela de integração nunca deve iniciar autenticação nem exibir
+    // seletor de contas. O perfil salvo é suficiente para restaurar a UI; a
+    // credencial Google só é revalidada quando o usuário executa uma ação
+    // online, como atualizar ou sincronizar o Classroom.
     authenticated = account != null;
 
     if (account != null) {
       courseLinks = await _store.getCourseLinks(account!.id);
       taskLinks = await _store.getTaskLinks(account!.id);
-    }
-
-    if (account != null && configured) {
-      final persisted = account!;
-      try {
-        final restored = await _auth.restore();
-        if (restored != null && restored.id == persisted.id) {
-          account = restored.copyWith(
-            classroomConnected: persisted.classroomConnected,
-            lastSyncAt: persisted.lastSyncAt,
-          );
-          await _store.saveAccount(account!);
-        }
-      } catch (_) {
-        // Não derruba o estado local quando o Credential Manager não consegue
-        // restaurar silenciosamente a credencial. A próxima operação online
-        // tentará renovar a autorização de forma interativa se necessário.
-      }
     }
 
     initialized = true;
