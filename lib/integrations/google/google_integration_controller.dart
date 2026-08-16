@@ -37,21 +37,35 @@ class GoogleIntegrationController extends ChangeNotifier {
     if (initialized) return;
     await _store.ensureSchema();
     account = await _store.getAccount();
+
+    // Se existe uma conta persistida, o Academia Flow deve lembrar que o
+    // usuário está conectado. A sessão/token do Google é revalidada somente
+    // quando uma operação online realmente precisar dela.
+    authenticated = account != null;
+
     if (account != null) {
       courseLinks = await _store.getCourseLinks(account!.id);
       taskLinks = await _store.getTaskLinks(account!.id);
     }
+
     if (account != null && configured) {
-      final restored = await _auth.restore();
-      if (restored != null && restored.id == account!.id) {
-        authenticated = true;
-        account = restored.copyWith(
-          classroomConnected: account!.classroomConnected,
-          lastSyncAt: account!.lastSyncAt,
-        );
-        await _store.saveAccount(account!);
+      final persisted = account!;
+      try {
+        final restored = await _auth.restore();
+        if (restored != null && restored.id == persisted.id) {
+          account = restored.copyWith(
+            classroomConnected: persisted.classroomConnected,
+            lastSyncAt: persisted.lastSyncAt,
+          );
+          await _store.saveAccount(account!);
+        }
+      } catch (_) {
+        // Não derruba o estado local quando o Credential Manager não consegue
+        // restaurar silenciosamente a credencial. A próxima operação online
+        // tentará renovar a autorização de forma interativa se necessário.
       }
     }
+
     initialized = true;
     notifyListeners();
   }
@@ -100,12 +114,13 @@ class GoogleIntegrationController extends ChangeNotifier {
   }
 
   Future<void> connectClassroom() async {
-    if (!authenticated || account == null) {
+    if (account == null) {
       throw StateError('Entre com uma conta Google antes de conectar o Classroom.');
     }
     await _run(() async {
       final token = await _auth.classroomAccessToken(interactive: true);
       courses = await _classroom.listActiveCourses(token);
+      authenticated = true;
       account = account!.copyWith(classroomConnected: true);
       await _store.saveAccount(account!);
     });
@@ -116,6 +131,7 @@ class GoogleIntegrationController extends ChangeNotifier {
     await _run(() async {
       final token = await _auth.classroomAccessToken(interactive: true);
       courses = await _classroom.listActiveCourses(token);
+      authenticated = true;
       if (!account!.classroomConnected) {
         account = account!.copyWith(classroomConnected: true);
         await _store.saveAccount(account!);
@@ -200,6 +216,7 @@ class GoogleIntegrationController extends ChangeNotifier {
     late ClassroomSyncReport report;
     await _run(() async {
       final token = await _auth.classroomAccessToken(interactive: true);
+      authenticated = true;
       final existingLinks = <String, ClassroomTaskLink>{
         for (final link in await _store.getTaskLinks(profile.id))
           '${link.courseId}:${link.courseWorkId}': link,
