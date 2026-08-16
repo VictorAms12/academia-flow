@@ -27,6 +27,8 @@ class GoogleAuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 
   bool _androidInitialized = false;
+  StreamSubscription<GoogleSignInAuthenticationEvent>? _androidAuthSubscription;
+  Completer<GoogleSignInAccount?>? _androidRestoreEvent;
   GoogleSignInAccount? _androidAccount;
   String? _desktopAccessToken;
   DateTime? _desktopAccessTokenExpiry;
@@ -35,13 +37,18 @@ class GoogleAuthService {
   bool get configured => GoogleOAuthConfig.currentPlatformConfigured;
   bool get supported => GoogleOAuthConfig.currentPlatformSupported;
 
+  /// Credential Manager no Android pode não devolver uma conta em uma
+  /// tentativa silenciosa após o processo do aplicativo ser encerrado.
+  /// O perfil salvo pelo Academia Flow pode continuar representando a sessão
+  /// local; a autorização Google é revalidada quando uma API for usada.
+  bool get supportsRememberedLocalSession => Platform.isAndroid;
+
   Future<GoogleAccountProfile?> restore() async {
     if (!configured) return null;
     if (Platform.isAndroid) {
       await _initializeAndroid();
       try {
-        final lightweight = _googleSignIn.attemptLightweightAuthentication();
-        final account = lightweight == null ? null : await lightweight;
+        final account = await _attemptAndroidRestore();
         if (account == null) return null;
         _androidAccount = account;
         return _fromAndroidAccount(account);
@@ -86,21 +93,45 @@ class GoogleAuthService {
     if (Platform.isAndroid) {
       await _initializeAndroid();
       var account = _androidAccount;
-      if (account == null) {
-        final lightweight = _googleSignIn.attemptLightweightAuthentication();
-        if (lightweight != null) account = await lightweight;
-      }
-      if (account == null) {
-        if (!interactive) throw StateError('Entre com sua conta Google novamente.');
-        account = await _googleSignIn.authenticate();
-      }
+      account ??= await _attemptAndroidRestore();
       _androidAccount = account;
-      final client = account.authorizationClient;
+
+      if (account != null) {
+        final client = account.authorizationClient;
+        final cached = await client.authorizationForScopes(GoogleOAuthConfig.classroomScopes);
+        if (cached != null) return cached.accessToken;
+        if (!interactive) throw StateError('O Google Classroom precisa de autorização.');
+        final granted = await client.authorizeScopes(GoogleOAuthConfig.classroomScopes);
+        return granted.accessToken;
+      }
+
+      // Quando o Credential Manager não restaura o objeto GoogleSignInAccount,
+      // ainda tentamos a autorização já concedida. No Android ela pode ser
+      // recuperada pela sessão do Google Play Services sem obrigar o usuário a
+      // repetir o login básico do Academia Flow.
+      final client = _googleSignIn.authorizationClient;
       final cached = await client.authorizationForScopes(GoogleOAuthConfig.classroomScopes);
       if (cached != null) return cached.accessToken;
-      if (!interactive) throw StateError('O Google Classroom precisa de autorização.');
-      final granted = await client.authorizeScopes(GoogleOAuthConfig.classroomScopes);
-      return granted.accessToken;
+      if (!interactive) {
+        throw StateError('A sessão Google precisa ser renovada para acessar o Classroom.');
+      }
+
+      try {
+        final granted = await client.authorizeScopes(GoogleOAuthConfig.classroomScopes);
+        return granted.accessToken;
+      } on GoogleSignInException {
+        // Último fallback: se o provedor perdeu completamente a sessão, só
+        // então fazemos autenticação interativa novamente.
+        final signedIn = await _googleSignIn.authenticate();
+        _androidAccount = signedIn;
+        final signedInClient = signedIn.authorizationClient;
+        final cachedAfterLogin =
+            await signedInClient.authorizationForScopes(GoogleOAuthConfig.classroomScopes);
+        if (cachedAfterLogin != null) return cachedAfterLogin.accessToken;
+        final grantedAfterLogin =
+            await signedInClient.authorizeScopes(GoogleOAuthConfig.classroomScopes);
+        return grantedAfterLogin.accessToken;
+      }
     }
     if (Platform.isWindows) {
       final requiredScopes = GoogleOAuthConfig.allScopes.toSet();
@@ -156,7 +187,51 @@ class GoogleAuthService {
     await _googleSignIn.initialize(
       serverClientId: GoogleOAuthConfig.androidServerClientId,
     );
+    _androidAuthSubscription ??= _googleSignIn.authenticationEvents.listen(
+      (event) {
+        if (event is GoogleSignInAuthenticationEventSignIn) {
+          _androidAccount = event.user;
+          final completer = _androidRestoreEvent;
+          if (completer != null && !completer.isCompleted) completer.complete(event.user);
+        } else if (event is GoogleSignInAuthenticationEventSignOut) {
+          _androidAccount = null;
+          final completer = _androidRestoreEvent;
+          if (completer != null && !completer.isCompleted) completer.complete(null);
+        }
+      },
+      onError: (_) {
+        final completer = _androidRestoreEvent;
+        if (completer != null && !completer.isCompleted) completer.complete(null);
+      },
+    );
     _androidInitialized = true;
+  }
+
+  Future<GoogleSignInAccount?> _attemptAndroidRestore() async {
+    if (_androidAccount != null) return _androidAccount;
+    _androidRestoreEvent = Completer<GoogleSignInAccount?>();
+    try {
+      final lightweight = _googleSignIn.attemptLightweightAuthentication();
+      if (lightweight != null) {
+        final account = await lightweight;
+        if (account != null) {
+          _androidAccount = account;
+          return account;
+        }
+      } else {
+        final account = await _androidRestoreEvent!.future.timeout(
+          const Duration(milliseconds: 900),
+          onTimeout: () => null,
+        );
+        if (account != null) {
+          _androidAccount = account;
+          return account;
+        }
+      }
+      return _androidAccount;
+    } finally {
+      _androidRestoreEvent = null;
+    }
   }
 
   GoogleAccountProfile _fromAndroidAccount(GoogleSignInAccount account) => GoogleAccountProfile(
