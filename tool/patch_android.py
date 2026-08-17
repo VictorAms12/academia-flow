@@ -22,17 +22,18 @@ if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' not in te
     text += '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
 app_gradle.write_text(text)
 
-# Branding Android. A fonte PNG é validada pelo Pillow e transformada nos
-# recursos oficiais do launcher em todas as densidades durante a build.
-icon_source = Path('tool/branding/academia_flow_icon.png')
+# Branding Android. O arquivo mantém a extensão histórica .jpg, mas o Pillow
+# detecta o formato real pelo cabeçalho. Esta é a arte válida usada nas builds
+# anteriores; os PNGs de launcher são sempre regenerados abaixo.
+icon_source = Path('tool/branding/academia_flow_icon.jpg')
 if not icon_source.exists():
     raise FileNotFoundError(f'Ícone do Academia Flow não encontrado: {icon_source}')
 
 res = root / 'app' / 'src' / 'main' / 'res'
-source = Image.open(icon_source).convert('RGBA')
+with Image.open(icon_source) as icon:
+    source = icon.convert('RGBA')
 
-# Mantém a arte aprovada, mas com escala menor, semelhante ao símbolo interno
-# do app. O espaço excedente é preto puro, sem gradiente.
+# Mantém o chapéu em escala menor e completa qualquer área excedente com preto.
 side = max(source.width, source.height)
 square = Image.new('RGBA', (side, side), (0, 0, 0, 255))
 source.thumbnail((int(side * 0.76), int(side * 0.76)), Image.Resampling.LANCZOS)
@@ -101,7 +102,6 @@ adaptive_xml = '''<adaptive-icon xmlns:android="http://schemas.android.com/apk/r
 (adaptive_dir / 'ic_launcher.xml').write_text(adaptive_xml, encoding='utf-8')
 (adaptive_dir / 'ic_launcher_round.xml').write_text(adaptive_xml, encoding='utf-8')
 
-# Ícone monocromático exclusivo das notificações.
 notification_icon_dir = res / 'drawable'
 notification_icon_dir.mkdir(parents=True, exist_ok=True)
 (notification_icon_dir / 'ic_stat_academia_flow.xml').write_text('''<vector xmlns:android="http://schemas.android.com/apk/res/android"
