@@ -1,0 +1,1 @@
+Validação temporária da build Android v2.5.9+17.
