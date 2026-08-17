@@ -23,12 +23,13 @@ app_gradle.write_text(text)
 
 # Branding: aplica o ícone próprio depois do `flutter create`, evitando que o
 # launcher volte a usar o ic_launcher padrão do Flutter em builds limpos.
-icon_source = Path('tool/branding/academia_flow_icon.png')
+# JPEG é usado aqui por compatibilidade direta com AAPT2.
+icon_source = Path('tool/branding/academia_flow_icon.jpg')
 if not icon_source.exists():
     raise FileNotFoundError(f'Ícone do Academia Flow não encontrado: {icon_source}')
 icon_dir = root / 'app' / 'src' / 'main' / 'res' / 'drawable-nodpi'
 icon_dir.mkdir(parents=True, exist_ok=True)
-icon_target = icon_dir / 'academia_flow_icon.png'
+icon_target = icon_dir / 'academia_flow_icon.jpg'
 shutil.copyfile(icon_source, icon_target)
 
 manifest = root / 'app' / 'src' / 'main' / 'AndroidManifest.xml'
