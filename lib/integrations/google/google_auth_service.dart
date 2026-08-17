@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -19,6 +20,8 @@ class GoogleAuthService {
   static const _refreshTokenKey = 'academia_flow_google_refresh_token';
   static const _desktopScopesKey = 'academia_flow_google_desktop_scopes';
   static const _androidProfileKey = 'academia_flow_google_android_profile';
+  static const _androidAccessTokenKey = 'academia_flow_google_android_access_token';
+  static const _androidAccessTokenAtKey = 'academia_flow_google_android_access_token_at';
   static const _tokenEndpoint = 'https://oauth2.googleapis.com/token';
   static const _revokeEndpoint = 'https://oauth2.googleapis.com/revoke';
   static const _userInfoEndpoint = 'https://openidconnect.googleapis.com/v1/userinfo';
@@ -29,7 +32,6 @@ class GoogleAuthService {
 
   bool _androidInitialized = false;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _androidAuthSubscription;
-  Completer<GoogleSignInAccount?>? _androidRestoreEvent;
   GoogleSignInAccount? _androidAccount;
   String? _desktopAccessToken;
   DateTime? _desktopAccessTokenExpiry;
@@ -41,22 +43,10 @@ class GoogleAuthService {
   Future<GoogleAccountProfile?> restore() async {
     if (!configured) return null;
     if (Platform.isAndroid) {
+      // Não executa attemptLightweightAuthentication aqui. No Android 7.x,
+      // esse fluxo pode mostrar One Tap/seletor de contas, mesmo quando o app
+      // só quer restaurar o estado visual. O perfil persistido é suficiente.
       await _initializeAndroid();
-      try {
-        final account = await _attemptAndroidRestore();
-        if (account != null) {
-          _androidAccount = account;
-          final profile = _fromAndroidAccount(account);
-          await _saveRememberedAndroidProfile(profile);
-          return profile;
-        }
-      } on GoogleSignInException {
-        // Credential Manager pode não restaurar silenciosamente a conta.
-      }
-
-      // Mantém o estado de conta do Academia Flow entre reinicializações.
-      // Tokens nunca são persistidos aqui; eles são revalidados quando uma
-      // chamada ao Google/Classroom realmente for necessária.
       return _readRememberedAndroidProfile();
     }
     if (Platform.isWindows) {
@@ -97,48 +87,82 @@ class GoogleAuthService {
     if (!configured) throw StateError(GoogleOAuthConfig.configurationMessage);
     if (Platform.isAndroid) {
       await _initializeAndroid();
-      var account = _androidAccount;
-      account ??= await _attemptAndroidRestore();
-      _androidAccount = account;
 
+      // Enquanto o processo do app estiver vivo, a conta real do plugin é a
+      // melhor fonte: authorizationForScopes não mostra UI quando a autorização
+      // já existe.
+      final account = _androidAccount;
       if (account != null) {
         final profile = _fromAndroidAccount(account);
         await _saveRememberedAndroidProfile(profile);
-        final client = account.authorizationClient;
-        final cached = await client.authorizationForScopes(GoogleOAuthConfig.classroomScopes);
-        if (cached != null) return cached.accessToken;
-        if (!interactive) throw StateError('O Google Classroom precisa de autorização.');
-        final granted = await client.authorizeScopes(GoogleOAuthConfig.classroomScopes);
-        return granted.accessToken;
+        final cached = await account.authorizationClient
+            .authorizationForScopes(GoogleOAuthConfig.classroomScopes);
+        if (cached != null) {
+          await _saveAndroidAccessToken(cached.accessToken);
+          return cached.accessToken;
+        }
       }
 
-      // O perfil local continua lembrado mesmo quando o Credential Manager não
-      // entrega um GoogleSignInAccount no relançamento. Tentamos recuperar a
-      // autorização existente antes de pedir novo login.
-      final client = _googleSignIn.authorizationClient;
-      final cached = await client.authorizationForScopes(GoogleOAuthConfig.classroomScopes);
-      if (cached != null) return cached.accessToken;
+      final remembered = await _readRememberedAndroidProfile();
+
+      // Após o Android matar o processo, não temos mais um GoogleSignInAccount
+      // Dart. Em vez de abrir o Credential Manager para reconstruí-lo, fazemos
+      // a mesma solicitação silenciosa do plugin diretamente, mas informando o
+      // ID e e-mail da conta já escolhida. promptIfUnauthorized=false garante
+      // que esta tentativa não abra seletor nem consentimento.
+      if (remembered != null) {
+        final silent = await _androidAuthorizationForProfile(
+          remembered,
+          promptIfUnauthorized: false,
+        );
+        if (silent != null) {
+          await _saveAndroidAccessToken(silent.accessToken);
+          return silent.accessToken;
+        }
+      }
+
+      // Fallback para reaberturas muito recentes: reutiliza apenas token salvo
+      // recentemente. Tokens antigos nunca são usados como sessão permanente.
+      final recentToken = await _readRecentAndroidAccessToken();
+      if (recentToken != null) return recentToken;
+
       if (!interactive) {
-        throw StateError('A sessão Google precisa ser renovada para acessar o Classroom.');
+        throw StateError('A autorização do Google Classroom precisa ser renovada.');
       }
 
-      try {
-        final granted = await client.authorizeScopes(GoogleOAuthConfig.classroomScopes);
-        return granted.accessToken;
-      } on GoogleSignInException {
-        // Só abre um novo login se o Google realmente não conseguir recuperar
-        // nenhuma credencial/autorização do aparelho.
-        final signedIn = await _googleSignIn.authenticate();
-        _androidAccount = signedIn;
-        await _saveRememberedAndroidProfile(_fromAndroidAccount(signedIn));
-        final signedInClient = signedIn.authorizationClient;
-        final cachedAfterLogin =
-            await signedInClient.authorizationForScopes(GoogleOAuthConfig.classroomScopes);
-        if (cachedAfterLogin != null) return cachedAfterLogin.accessToken;
-        final grantedAfterLogin =
-            await signedInClient.authorizeScopes(GoogleOAuthConfig.classroomScopes);
-        return grantedAfterLogin.accessToken;
+      // Se a autorização realmente precisar de interação, ainda direcionamos
+      // o pedido para a conta já salva. Isso evita um seletor de contas apenas
+      // para escolher novamente a mesma conta.
+      if (remembered != null) {
+        final granted = await _androidAuthorizationForProfile(
+          remembered,
+          promptIfUnauthorized: true,
+        );
+        if (granted != null) {
+          await _saveAndroidAccessToken(granted.accessToken);
+          return granted.accessToken;
+        }
       }
+
+      // Último recurso: só há novo login quando não existe mais uma conta
+      // persistida/autorização recuperável.
+      final signedIn = await _googleSignIn.authenticate(
+        scopeHint: GoogleOAuthConfig.classroomScopes,
+      );
+      _androidAccount = signedIn;
+      final profile = _fromAndroidAccount(signedIn);
+      await _saveRememberedAndroidProfile(profile);
+      final client = signedIn.authorizationClient;
+      final cachedAfterLogin =
+          await client.authorizationForScopes(GoogleOAuthConfig.classroomScopes);
+      if (cachedAfterLogin != null) {
+        await _saveAndroidAccessToken(cachedAfterLogin.accessToken);
+        return cachedAfterLogin.accessToken;
+      }
+      final grantedAfterLogin =
+          await client.authorizeScopes(GoogleOAuthConfig.classroomScopes);
+      await _saveAndroidAccessToken(grantedAfterLogin.accessToken);
+      return grantedAfterLogin.accessToken;
     }
     if (Platform.isWindows) {
       final requiredScopes = GoogleOAuthConfig.allScopes.toSet();
@@ -163,6 +187,49 @@ class GoogleAuthService {
     throw UnsupportedError('Google Classroom disponível somente no Android e Windows nesta versão.');
   }
 
+  Future<ClientAuthorizationTokenData?> _androidAuthorizationForProfile(
+    GoogleAccountProfile profile, {
+    required bool promptIfUnauthorized,
+  }) {
+    return GoogleSignInPlatform.instance.clientAuthorizationTokensForScopes(
+      ClientAuthorizationTokensForScopesParameters(
+        request: AuthorizationRequestDetails(
+          scopes: GoogleOAuthConfig.classroomScopes,
+          userId: profile.id,
+          email: profile.email,
+          promptIfUnauthorized: promptIfUnauthorized,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveAndroidAccessToken(String accessToken) async {
+    if (accessToken.trim().isEmpty) return;
+    await _secureStorage.write(key: _androidAccessTokenKey, value: accessToken);
+    await _secureStorage.write(
+      key: _androidAccessTokenAtKey,
+      value: DateTime.now().toUtc().toIso8601String(),
+    );
+  }
+
+  Future<String?> _readRecentAndroidAccessToken() async {
+    final token = await _secureStorage.read(key: _androidAccessTokenKey);
+    final savedAtRaw = await _secureStorage.read(key: _androidAccessTokenAtKey);
+    if (token == null || token.trim().isEmpty || savedAtRaw == null) return null;
+    final savedAt = DateTime.tryParse(savedAtRaw)?.toUtc();
+    if (savedAt == null) return null;
+    if (DateTime.now().toUtc().difference(savedAt) > const Duration(minutes: 45)) {
+      await _clearAndroidAccessToken();
+      return null;
+    }
+    return token;
+  }
+
+  Future<void> _clearAndroidAccessToken() async {
+    await _secureStorage.delete(key: _androidAccessTokenKey);
+    await _secureStorage.delete(key: _androidAccessTokenAtKey);
+  }
+
   Future<void> signOut({bool revoke = false}) async {
     if (Platform.isAndroid) {
       if (_androidInitialized) {
@@ -176,6 +243,7 @@ class GoogleAuthService {
       }
       _androidAccount = null;
       await _secureStorage.delete(key: _androidProfileKey);
+      await _clearAndroidAccessToken();
     }
     if (Platform.isWindows) {
       final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
@@ -202,47 +270,13 @@ class GoogleAuthService {
         if (event is GoogleSignInAuthenticationEventSignIn) {
           _androidAccount = event.user;
           unawaited(_saveRememberedAndroidProfile(_fromAndroidAccount(event.user)));
-          final completer = _androidRestoreEvent;
-          if (completer != null && !completer.isCompleted) completer.complete(event.user);
         } else if (event is GoogleSignInAuthenticationEventSignOut) {
           _androidAccount = null;
-          final completer = _androidRestoreEvent;
-          if (completer != null && !completer.isCompleted) completer.complete(null);
         }
       },
-      onError: (_) {
-        final completer = _androidRestoreEvent;
-        if (completer != null && !completer.isCompleted) completer.complete(null);
-      },
+      onError: (_) {},
     );
     _androidInitialized = true;
-  }
-
-  Future<GoogleSignInAccount?> _attemptAndroidRestore() async {
-    if (_androidAccount != null) return _androidAccount;
-    _androidRestoreEvent = Completer<GoogleSignInAccount?>();
-    try {
-      final lightweight = _googleSignIn.attemptLightweightAuthentication();
-      if (lightweight != null) {
-        final account = await lightweight;
-        if (account != null) {
-          _androidAccount = account;
-          return account;
-        }
-      } else {
-        final account = await _androidRestoreEvent!.future.timeout(
-          const Duration(milliseconds: 900),
-          onTimeout: () => null,
-        );
-        if (account != null) {
-          _androidAccount = account;
-          return account;
-        }
-      }
-      return _androidAccount;
-    } finally {
-      _androidRestoreEvent = null;
-    }
   }
 
   Future<void> _saveRememberedAndroidProfile(GoogleAccountProfile profile) async {
