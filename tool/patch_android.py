@@ -32,8 +32,10 @@ icon_dir.mkdir(parents=True, exist_ok=True)
 icon_target = icon_dir / 'academia_flow_icon.jpg'
 shutil.copyfile(icon_source, icon_target)
 
-# Ícone pequeno de notificação. O flutter_local_notifications precisa de um
-# recurso Android próprio e não deve depender do ic_launcher do Flutter.
+# Ícone pequeno de notificação. O flutter_local_notifications resolve esse
+# recurso pelo nome em runtime. Em builds release o resource shrinker pode
+# considerar esse drawable não utilizado, então também criamos uma referência
+# estática no AndroidManifest para garantir que ele permaneça dentro do APK.
 notification_icon_dir = root / 'app' / 'src' / 'main' / 'res' / 'drawable'
 notification_icon_dir.mkdir(parents=True, exist_ok=True)
 (notification_icon_dir / 'ic_stat_academia_flow.xml').write_text('''<vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -54,6 +56,15 @@ if 'android.permission.RECEIVE_BOOT_COMPLETED' not in m:
 m = m.replace('android:label="academia_flow"', 'android:label="Academia Flow"')
 m = m.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/academia_flow_icon"')
 m = m.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/academia_flow_icon"')
+
+# Referência estática para impedir que o otimizador de recursos remova o ícone
+# que o plugin encontra dinamicamente pelo nome `ic_stat_academia_flow`.
+if 'academia_flow.notification_icon_keep' not in m:
+    m = m.replace(
+        '    </application>',
+        '        <meta-data android:name="academia_flow.notification_icon_keep" android:resource="@drawable/ic_stat_academia_flow" />\n    </application>',
+    )
+
 receivers = '''\n        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />\n        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n            <intent-filter>\n                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>\n                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>\n                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>\n            </intent-filter>\n        </receiver>\n'''
 if 'ScheduledNotificationReceiver' not in m:
     m = m.replace('    </application>', receivers + '    </application>')
