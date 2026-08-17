@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/attendance_feedback.dart';
 import '../widgets/common.dart';
 import '../widgets/routine_dialogs.dart';
 import '../widgets/session_actions.dart';
@@ -51,9 +52,21 @@ class ClassDetailScreen extends StatelessWidget {
                     ],
                     const SizedBox(height: 18),
                     Wrap(spacing: 8, runSpacing: 8, children: [
-                      FilledButton.icon(onPressed: () => state.markAttendance(session, AttendanceStatus.present), icon: const Icon(Icons.check_rounded), label: const Text('Presente')),
-                      FilledButton.tonalIcon(onPressed: () => state.markAttendance(session, AttendanceStatus.absent), icon: const Icon(Icons.close_rounded), label: const Text('Faltei')),
-                      OutlinedButton.icon(onPressed: () => state.markAttendance(session, AttendanceStatus.cancelled), icon: const Icon(Icons.event_busy_rounded), label: const Text('Cancelada')),
+                      FilledButton.icon(
+                        onPressed: session.status == AttendanceStatus.present ? null : () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.present),
+                        icon: Icon(session.status == AttendanceStatus.present ? Icons.verified_rounded : Icons.check_rounded),
+                        label: Text(session.status == AttendanceStatus.present ? 'Presença registrada' : 'Presente'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: session.status == AttendanceStatus.absent ? null : () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.absent),
+                        icon: const Icon(Icons.close_rounded),
+                        label: Text(session.status == AttendanceStatus.absent ? 'Falta registrada' : 'Faltei'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: session.status == AttendanceStatus.cancelled ? null : () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.cancelled),
+                        icon: const Icon(Icons.event_busy_rounded),
+                        label: Text(session.status == AttendanceStatus.cancelled ? 'Aula cancelada' : 'Cancelada'),
+                      ),
                     ]),
                   ]),
                 ),
