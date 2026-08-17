@@ -13,7 +13,7 @@ if 'isCoreLibraryDesugaringEnabled = true' not in text:
 
 if 'signingConfigs {' not in text:
     marker = '    buildTypes {'
-    signing = '''    signingConfigs {\n        create("academiaFlow") {\n            storeFile = file("academia-flow-upload.jks")\n            storePassword = "AcademiaFlow2026!"\n            keyAlias = "academiaflow"\n            keyPassword = "AcademiaFlow2026!"\n        }\n    }\n\n'''
+    signing = '''    signingConfigs {\n        create("academiaFlow") {\n            storeFile = file("academia-flow-upload.jks")\n            storePassword = System.getenv("ACADEMIA_FLOW_STORE_PASSWORD") ?: ""\n            keyAlias = "academiaflow"\n            keyPassword = System.getenv("ACADEMIA_FLOW_KEY_PASSWORD") ?: ""\n        }\n    }\n\n'''
     text = text.replace(marker, signing + marker, 1)
 
 text = text.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("academiaFlow")')
@@ -22,14 +22,24 @@ if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' not in te
     text += '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
 app_gradle.write_text(text)
 
-# Branding Android: o JPEG é somente a arte-fonte validada. O Pillow gera
-# PNGs Android reais nas densidades oficiais do launcher durante a build.
-icon_source = Path('tool/branding/academia_flow_icon.jpg')
+# Branding Android. A fonte PNG é validada pelo Pillow e transformada nos
+# recursos oficiais do launcher em todas as densidades durante a build.
+icon_source = Path('tool/branding/academia_flow_icon.png')
 if not icon_source.exists():
     raise FileNotFoundError(f'Ícone do Academia Flow não encontrado: {icon_source}')
 
 res = root / 'app' / 'src' / 'main' / 'res'
 source = Image.open(icon_source).convert('RGBA')
+
+# Mantém a arte aprovada, mas com escala menor, semelhante ao símbolo interno
+# do app. O espaço excedente é preto puro, sem gradiente.
+side = max(source.width, source.height)
+square = Image.new('RGBA', (side, side), (0, 0, 0, 255))
+source.thumbnail((int(side * 0.76), int(side * 0.76)), Image.Resampling.LANCZOS)
+x = (side - source.width) // 2
+y = (side - source.height) // 2
+square.alpha_composite(source, (x, y))
+source = square
 
 legacy_sizes = {
     'mdpi': 48,
@@ -50,8 +60,6 @@ for density, size in legacy_sizes.items():
     mipmap_dir = res / f'mipmap-{density}'
     mipmap_dir.mkdir(parents=True, exist_ok=True)
 
-    # Remove qualquer recurso antigo com o mesmo nome, inclusive JPEGs de
-    # builds anteriores, para não haver recurso duplicado no AAPT2.
     for old_name in (
         'ic_launcher.png', 'ic_launcher.jpg',
         'ic_launcher_round.png', 'ic_launcher_round.jpg',
@@ -76,11 +84,10 @@ for density, size in legacy_sizes.items():
         optimize=True,
     )
 
-# Adaptive icon padrão para Android 8+.
 values_dir = res / 'values'
 values_dir.mkdir(parents=True, exist_ok=True)
 (values_dir / 'launcher_colors.xml').write_text(
-    '''<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#111315</color>\n</resources>\n''',
+    '''<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#000000</color>\n</resources>\n''',
     encoding='utf-8',
 )
 
@@ -94,7 +101,7 @@ adaptive_xml = '''<adaptive-icon xmlns:android="http://schemas.android.com/apk/r
 (adaptive_dir / 'ic_launcher.xml').write_text(adaptive_xml, encoding='utf-8')
 (adaptive_dir / 'ic_launcher_round.xml').write_text(adaptive_xml, encoding='utf-8')
 
-# Ícone monocromático pequeno exclusivo das notificações.
+# Ícone monocromático exclusivo das notificações.
 notification_icon_dir = res / 'drawable'
 notification_icon_dir.mkdir(parents=True, exist_ok=True)
 (notification_icon_dir / 'ic_stat_academia_flow.xml').write_text('''<vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -117,7 +124,6 @@ if 'android.permission.RECEIVE_BOOT_COMPLETED' not in m:
     )
 m = m.replace('android:label="academia_flow"', 'android:label="Academia Flow"')
 
-# O package sempre aponta para os recursos de launcher padrão do Android.
 m = m.replace('android:icon="@drawable/academia_flow_icon"', 'android:icon="@mipmap/ic_launcher"')
 if 'android:icon="@mipmap/ic_launcher"' not in m:
     m = m.replace('<application', '<application\n        android:icon="@mipmap/ic_launcher"', 1)
@@ -130,8 +136,6 @@ if 'android:roundIcon=' not in m:
         1,
     )
 
-# Garante que o resource shrinker preserve o ícone encontrado pelo plugin de
-# notificações dinamicamente em runtime.
 if 'academia_flow.notification_icon_keep' not in m:
     m = m.replace(
         '    </application>',
