@@ -22,10 +22,9 @@ if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' not in te
     text += '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
 app_gradle.write_text(text)
 
-# Branding Android: gera PNGs reais nas densidades oficiais do launcher.
-# Isso evita o fallback de alguns launchers/instaladores Xiaomi para o ícone
-# genérico quando um JPEG é usado como recurso do aplicativo.
-icon_source = Path('tool/branding/academia_flow_icon.png')
+# Branding Android: o JPEG é somente a arte-fonte validada. O Pillow gera
+# PNGs Android reais nas densidades oficiais do launcher durante a build.
+icon_source = Path('tool/branding/academia_flow_icon.jpg')
 if not icon_source.exists():
     raise FileNotFoundError(f'Ícone do Academia Flow não encontrado: {icon_source}')
 
@@ -51,8 +50,8 @@ for density, size in legacy_sizes.items():
     mipmap_dir = res / f'mipmap-{density}'
     mipmap_dir.mkdir(parents=True, exist_ok=True)
 
-    # Remove qualquer recurso antigo com o mesmo nome, inclusive os JPEGs
-    # usados nas builds anteriores.
+    # Remove qualquer recurso antigo com o mesmo nome, inclusive JPEGs de
+    # builds anteriores, para não haver recurso duplicado no AAPT2.
     for old_name in (
         'ic_launcher.png', 'ic_launcher.jpg',
         'ic_launcher_round.png', 'ic_launcher_round.jpg',
