@@ -3,6 +3,7 @@ import '../models/models.dart';
 import '../screens/class_detail_screen.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import 'attendance_feedback.dart';
 import 'common.dart';
 import 'motion.dart';
 import 'routine_dialogs.dart';
@@ -55,30 +56,81 @@ class _NextClass extends StatelessWidget {
   final AppState state;
   final ClassSession session;
   final bool current;
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final delta = session.startsAt.difference(now);
-    final when = current ? 'ACONTECENDO AGORA' : delta.inDays > 0 ? 'EM ${delta.inDays}D' : delta.inHours > 0 ? 'EM ${delta.inHours}H ${delta.inMinutes.remainder(60)}MIN' : 'EM ${delta.inMinutes.clamp(0, 999)} MIN';
+    final when = current
+        ? 'ACONTECENDO AGORA'
+        : delta.inDays > 0
+            ? 'EM ${delta.inDays}D'
+            : delta.inHours > 0
+                ? 'EM ${delta.inHours}H ${delta.inMinutes.remainder(60)}MIN'
+                : 'EM ${delta.inMinutes.clamp(0, 999)} MIN';
+
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: session.id!))),
+      onTap: session.id == null ? null : () => Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: session.id!))),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: .07), borderRadius: BorderRadius.circular(16)),
         child: Row(children: [
-          Container(width: 48, height: 48, decoration: BoxDecoration(color: current ? AppColors.gold.withValues(alpha: .15) : Theme.of(context).colorScheme.primary.withValues(alpha: .10), borderRadius: BorderRadius.circular(14)), child: Icon(current ? Icons.play_circle_fill_rounded : Icons.schedule_rounded, color: current ? AppColors.gold : null)),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: current ? AppColors.gold.withValues(alpha: .15) : Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(current ? Icons.play_circle_fill_rounded : Icons.schedule_rounded, color: current ? AppColors.gold : null),
+          ),
           const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(when, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: current ? AppColors.gold : Theme.of(context).colorScheme.primary)),
-            const SizedBox(height: 3),
-            Text(state.subjectName(session.subjectId), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
-            Text('${formatRoutineDate(session.date)} • ${session.start}–${session.end}${session.room.isEmpty ? '' : ' • ${session.room}'}', style: Theme.of(context).textTheme.bodySmall),
-          ])),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(when, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: current ? AppColors.gold : Theme.of(context).colorScheme.primary)),
+                  if (session.status != AttendanceStatus.pending) _CompactAttendanceBadge(session.status),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(state.subjectName(session.subjectId), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+              Text('${formatRoutineDate(session.date)} • ${session.start}–${session.end}${session.room.isEmpty ? '' : ' • ${session.room}'}', style: Theme.of(context).textTheme.bodySmall),
+            ]),
+          ),
           const Icon(Icons.chevron_right_rounded),
         ]),
       ),
+    );
+  }
+}
+
+class _CompactAttendanceBadge extends StatelessWidget {
+  const _CompactAttendanceBadge(this.status);
+  final AttendanceStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, icon, color) = switch (status) {
+      AttendanceStatus.present => ('PRESENTE', Icons.check_circle_rounded, AppColors.success),
+      AttendanceStatus.absent => ('FALTA', Icons.cancel_rounded, AppColors.danger),
+      AttendanceStatus.cancelled => ('CANCELADA', Icons.event_busy_rounded, Colors.grey),
+      AttendanceStatus.pending => ('PENDENTE', Icons.schedule_rounded, AppColors.gold),
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(20)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.w900)),
+      ]),
     );
   }
 }
@@ -87,14 +139,25 @@ class _PendingRow extends StatelessWidget {
   const _PendingRow({required this.state, required this.session});
   final AppState state;
   final ClassSession session;
+
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 7),
         child: Row(children: [
           Expanded(child: Text('${state.subjectName(session.subjectId)} • ${formatRoutineDate(session.date)} ${session.start}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
-          IconButton.filledTonal(tooltip: 'Presente', visualDensity: VisualDensity.compact, onPressed: () => state.markAttendance(session, AttendanceStatus.present), icon: const Icon(Icons.check_rounded, size: 18)),
+          IconButton.filledTonal(
+            tooltip: 'Presente',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.present),
+            icon: const Icon(Icons.check_rounded, size: 18),
+          ),
           const SizedBox(width: 4),
-          IconButton.filledTonal(tooltip: 'Faltei', visualDensity: VisualDensity.compact, onPressed: () => state.markAttendance(session, AttendanceStatus.absent), icon: const Icon(Icons.close_rounded, size: 18)),
+          IconButton.filledTonal(
+            tooltip: 'Faltei',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.absent),
+            icon: const Icon(Icons.close_rounded, size: 18),
+          ),
         ]),
       );
 }
@@ -104,6 +167,7 @@ class _TimelineRow extends StatelessWidget {
   final AppState state;
   final ClassSession session;
   final bool last;
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
