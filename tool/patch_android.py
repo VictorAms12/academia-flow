@@ -32,6 +32,21 @@ icon_dir.mkdir(parents=True, exist_ok=True)
 icon_target = icon_dir / 'academia_flow_icon.jpg'
 shutil.copyfile(icon_source, icon_target)
 
+# Ícone pequeno de notificação. O flutter_local_notifications precisa de um
+# recurso Android próprio e não deve depender do ic_launcher do Flutter.
+notification_icon_dir = root / 'app' / 'src' / 'main' / 'res' / 'drawable'
+notification_icon_dir.mkdir(parents=True, exist_ok=True)
+(notification_icon_dir / 'ic_stat_academia_flow.xml').write_text('''<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,3L1,9l11,6 9,-4.91V17h2V9L12,3zM12,12.82L5.24,9 12,5.18 18.76,9 12,12.82zM5,13.18v4L12,21l7,-3.82v-4L12,17 5,13.18z" />
+</vector>
+''', encoding='utf-8')
+
 manifest = root / 'app' / 'src' / 'main' / 'AndroidManifest.xml'
 m = manifest.read_text()
 if 'android.permission.RECEIVE_BOOT_COMPLETED' not in m:
