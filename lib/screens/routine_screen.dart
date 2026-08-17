@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
+import '../widgets/attendance_feedback.dart';
 import '../widgets/common.dart';
 import '../widgets/forms.dart';
 import '../widgets/motion.dart';
@@ -77,6 +78,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
 class _TodayTab extends StatelessWidget {
   const _TodayTab({required this.state});
   final AppState state;
+
   @override
   Widget build(BuildContext context) {
     final current = state.currentSession;
@@ -86,14 +88,27 @@ class _TodayTab extends StatelessWidget {
       if (current != null)
         SoftCard(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const SectionTitle('Aula atual'),
+            Row(children: [
+              const Expanded(child: SectionTitle('Aula atual')),
+              if (current.status != AttendanceStatus.pending) _AttendanceBadge(current.status),
+            ]),
             const SizedBox(height: 9),
             Text(state.subjectName(current.subjectId), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
             Text('${current.start}–${current.end}${current.room.isEmpty ? '' : ' • ${current.room}'}', style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 12),
             Wrap(spacing: 8, runSpacing: 8, children: [
-              FilledButton.icon(onPressed: () => state.markAttendance(current, AttendanceStatus.present), icon: const Icon(Icons.check_rounded), label: const Text('Estou presente')),
-              FilledButton.tonalIcon(onPressed: current.id == null ? null : () => Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: current.id!))), icon: const Icon(Icons.open_in_new_rounded), label: const Text('Abrir aula')),
+              FilledButton.icon(
+                onPressed: current.status == AttendanceStatus.present
+                    ? null
+                    : () => markAttendanceWithFeedback(context, state, current, AttendanceStatus.present),
+                icon: Icon(current.status == AttendanceStatus.present ? Icons.verified_rounded : Icons.check_rounded),
+                label: Text(current.status == AttendanceStatus.present ? 'Presença registrada' : 'Estou presente'),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: current.id == null ? null : () => Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: current.id!))),
+                icon: const Icon(Icons.open_in_new_rounded),
+                label: const Text('Abrir aula'),
+              ),
             ]),
           ]),
         ),
@@ -106,6 +121,30 @@ class _TodayTab extends StatelessWidget {
         ])),
       ],
     ]);
+  }
+}
+
+class _AttendanceBadge extends StatelessWidget {
+  const _AttendanceBadge(this.status);
+  final AttendanceStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, icon, color) = switch (status) {
+      AttendanceStatus.present => ('PRESENTE', Icons.check_circle_rounded, AppColors.success),
+      AttendanceStatus.absent => ('FALTA', Icons.cancel_rounded, AppColors.danger),
+      AttendanceStatus.cancelled => ('CANCELADA', Icons.event_busy_rounded, Colors.grey),
+      AttendanceStatus.pending => ('PENDENTE', Icons.schedule_rounded, AppColors.gold),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(20)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w900)),
+      ]),
+    );
   }
 }
 
@@ -126,8 +165,16 @@ class _AttendanceTab extends StatelessWidget {
               title: Text(state.subjectName(session.subjectId), style: const TextStyle(fontWeight: FontWeight.w900)),
               subtitle: Text('${formatRoutineDate(session.date)} • ${session.start}–${session.end}'),
               trailing: Wrap(spacing: 4, children: [
-                IconButton.filledTonal(onPressed: () => state.markAttendance(session, AttendanceStatus.present), icon: const Icon(Icons.check_rounded)),
-                IconButton.filledTonal(onPressed: () => state.markAttendance(session, AttendanceStatus.absent), icon: const Icon(Icons.close_rounded)),
+                IconButton.filledTonal(
+                  tooltip: 'Presente',
+                  onPressed: () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.present),
+                  icon: const Icon(Icons.check_rounded),
+                ),
+                IconButton.filledTonal(
+                  tooltip: 'Faltei',
+                  onPressed: () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.absent),
+                  icon: const Icon(Icons.close_rounded),
+                ),
               ]),
             ),
         ])),
