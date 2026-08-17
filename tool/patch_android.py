@@ -21,22 +21,52 @@ if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' not in te
     text += '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
 app_gradle.write_text(text)
 
-# Branding: aplica o ícone próprio depois do `flutter create`, evitando que o
-# launcher volte a usar o ic_launcher padrão do Flutter em builds limpos.
-# JPEG é usado aqui por compatibilidade direta com AAPT2.
+# Branding do launcher.
+# O Android moderno espera um recurso em mipmap e, a partir do Android 8,
+# um adaptive icon. Usar um JPEG direto em android:icon pode fazer launchers
+# OEM exibirem o ícone genérico do Android. Mantemos a arte original como
+# drawable e também recriamos ic_launcher/ic_launcher_round corretamente.
 icon_source = Path('tool/branding/academia_flow_icon.jpg')
 if not icon_source.exists():
     raise FileNotFoundError(f'Ícone do Academia Flow não encontrado: {icon_source}')
-icon_dir = root / 'app' / 'src' / 'main' / 'res' / 'drawable-nodpi'
-icon_dir.mkdir(parents=True, exist_ok=True)
-icon_target = icon_dir / 'academia_flow_icon.jpg'
-shutil.copyfile(icon_source, icon_target)
+
+res = root / 'app' / 'src' / 'main' / 'res'
+
+# Arte-base para foreground/adaptive icon.
+drawable_nodpi = res / 'drawable-nodpi'
+drawable_nodpi.mkdir(parents=True, exist_ok=True)
+shutil.copyfile(icon_source, drawable_nodpi / 'academia_flow_icon.jpg')
+
+# Ícones legacy para launchers que não usam adaptive icon. A mesma imagem em
+# cada bucket evita qualquer fallback para o ic_launcher padrão do Flutter.
+for density in ('mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'):
+    mipmap_dir = res / f'mipmap-{density}'
+    mipmap_dir.mkdir(parents=True, exist_ok=True)
+    # Remove os PNGs do template Flutter, se existirem.
+    for old_name in ('ic_launcher.png', 'ic_launcher_round.png'):
+        old = mipmap_dir / old_name
+        if old.exists():
+            old.unlink()
+    shutil.copyfile(icon_source, mipmap_dir / 'ic_launcher.jpg')
+    shutil.copyfile(icon_source, mipmap_dir / 'ic_launcher_round.jpg')
+
+# Adaptive icon para Android 8+. O sistema aplica a máscara apropriada do
+# launcher (círculo, squircle etc.) sem substituir a arte pelo ícone genérico.
+adaptive_dir = res / 'mipmap-anydpi-v26'
+adaptive_dir.mkdir(parents=True, exist_ok=True)
+adaptive_xml = '''<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@android:color/black" />
+    <foreground android:drawable="@drawable/academia_flow_icon" />
+</adaptive-icon>
+'''
+(adaptive_dir / 'ic_launcher.xml').write_text(adaptive_xml, encoding='utf-8')
+(adaptive_dir / 'ic_launcher_round.xml').write_text(adaptive_xml, encoding='utf-8')
 
 # Ícone pequeno de notificação. O flutter_local_notifications resolve esse
 # recurso pelo nome em runtime. Em builds release o resource shrinker pode
 # considerar esse drawable não utilizado, então também criamos uma referência
 # estática no AndroidManifest para garantir que ele permaneça dentro do APK.
-notification_icon_dir = root / 'app' / 'src' / 'main' / 'res' / 'drawable'
+notification_icon_dir = res / 'drawable'
 notification_icon_dir.mkdir(parents=True, exist_ok=True)
 (notification_icon_dir / 'ic_stat_academia_flow.xml').write_text('''<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
@@ -54,8 +84,16 @@ m = manifest.read_text()
 if 'android.permission.RECEIVE_BOOT_COMPLETED' not in m:
     m = m.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">', '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>')
 m = m.replace('android:label="academia_flow"', 'android:label="Academia Flow"')
-m = m.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/academia_flow_icon"')
-m = m.replace('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/academia_flow_icon"')
+
+# Volta a usar o padrão Android de launcher resource. Também corrige builds em
+# que o patch anterior havia apontado diretamente para @drawable.
+m = m.replace('android:icon="@drawable/academia_flow_icon"', 'android:icon="@mipmap/ic_launcher"')
+if 'android:icon="@mipmap/ic_launcher"' not in m:
+    m = m.replace('<application', '<application\n        android:icon="@mipmap/ic_launcher"', 1)
+
+m = m.replace('android:roundIcon="@drawable/academia_flow_icon"', 'android:roundIcon="@mipmap/ic_launcher_round"')
+if 'android:roundIcon=' not in m:
+    m = m.replace('android:icon="@mipmap/ic_launcher"', 'android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher_round"', 1)
 
 # Referência estática para impedir que o otimizador de recursos remova o ícone
 # que o plugin encontra dinamicamente pelo nome `ic_stat_academia_flow`.
@@ -70,4 +108,4 @@ if 'ScheduledNotificationReceiver' not in m:
     m = m.replace('    </application>', receivers + '    </application>')
 manifest.write_text(m)
 
-print('Android configurado: package fixo, assinatura persistente, notificações e ícone Academia Flow.')
+print('Android configurado: package fixo, assinatura persistente, notificações e launcher adaptativo Academia Flow.')
