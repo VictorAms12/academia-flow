@@ -78,7 +78,7 @@ class NotificationService {
 
     await _plugin.initialize(
       settings: const fln.InitializationSettings(
-        android: fln.AndroidInitializationSettings('@mipmap/ic_launcher'),
+        android: fln.AndroidInitializationSettings('ic_stat_academia_flow'),
       ),
       onDidReceiveNotificationResponse: _handleResponse,
     );
