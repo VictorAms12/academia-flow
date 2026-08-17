@@ -1,7 +1,7 @@
 name: academia_flow
 description: Organizador universitario academico offline em Flutter.
 publish_to: "none"
-version: 2.5.0+8
+version: 2.5.1+9
 
 environment:
   sdk: ">=3.12.0 <4.0.0"
@@ -16,6 +16,7 @@ dependencies:
   timezone: ^0.11.1
   flutter_timezone: ^5.1.0
   google_sign_in: ^7.2.0
+  google_sign_in_platform_interface: ^3.1.0
   flutter_secure_storage: ^10.3.1
   http: ^1.6.0
   crypto: ^3.0.7
