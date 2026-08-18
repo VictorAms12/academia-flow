@@ -7,8 +7,20 @@ class GoogleIntegrationStore {
   GoogleIntegrationStore._();
   static final GoogleIntegrationStore instance = GoogleIntegrationStore._();
   final AppDatabase _db = AppDatabase.instance;
+  Future<void>? _schemaFuture;
 
-  Future<void> ensureSchema() async {
+  Future<void> ensureSchema() {
+    final existing = _schemaFuture;
+    if (existing != null) return existing;
+    final future = _createSchema();
+    _schemaFuture = future;
+    return future.catchError((Object error) {
+      _schemaFuture = null;
+      throw error;
+    });
+  }
+
+  Future<void> _createSchema() async {
     final db = await _db.database;
     await db.execute('''CREATE TABLE IF NOT EXISTS google_account(
       singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
@@ -42,6 +54,7 @@ class GoogleIntegrationStore {
       FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
     )''');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_classroom_task_id ON classroom_task_links(task_id)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_classroom_course_user ON classroom_course_links(google_user_id, classroom_name)');
   }
 
   Future<GoogleAccountProfile?> getAccount() async {
@@ -66,7 +79,12 @@ class GoogleIntegrationStore {
   Future<List<ClassroomCourseLink>> getCourseLinks(String googleUserId) async {
     await ensureSchema();
     final db = await _db.database;
-    return (await db.query('classroom_course_links', where: 'google_user_id = ?', whereArgs: [googleUserId], orderBy: 'classroom_name COLLATE NOCASE'))
+    return (await db.query(
+      'classroom_course_links',
+      where: 'google_user_id = ?',
+      whereArgs: [googleUserId],
+      orderBy: 'classroom_name COLLATE NOCASE',
+    ))
         .map(ClassroomCourseLink.fromMap)
         .toList();
   }
@@ -78,14 +96,34 @@ class GoogleIntegrationStore {
   }
 
   Future<void> deleteCourseLink(String googleUserId, String courseId) async {
+    await ensureSchema();
     final db = await _db.database;
-    await db.delete('classroom_course_links', where: 'google_user_id = ? AND classroom_course_id = ?', whereArgs: [googleUserId, courseId]);
+    await db.delete(
+      'classroom_course_links',
+      where: 'google_user_id = ? AND classroom_course_id = ?',
+      whereArgs: [googleUserId, courseId],
+    );
+  }
+
+  Future<void> deleteTaskLinksForCourse(String googleUserId, String courseId) async {
+    await ensureSchema();
+    final db = await _db.database;
+    await db.delete(
+      'classroom_task_links',
+      where: 'google_user_id = ? AND classroom_course_id = ?',
+      whereArgs: [googleUserId, courseId],
+    );
   }
 
   Future<List<ClassroomTaskLink>> getTaskLinks(String googleUserId) async {
     await ensureSchema();
     final db = await _db.database;
-    return (await db.query('classroom_task_links', where: 'google_user_id = ?', whereArgs: [googleUserId], orderBy: 'updated_at DESC'))
+    return (await db.query(
+      'classroom_task_links',
+      where: 'google_user_id = ?',
+      whereArgs: [googleUserId],
+      orderBy: 'updated_at DESC',
+    ))
         .map(ClassroomTaskLink.fromMap)
         .toList();
   }
