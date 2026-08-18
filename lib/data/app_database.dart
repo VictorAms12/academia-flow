@@ -202,8 +202,7 @@ class AppDatabase {
   }
 
   Future<String?> getSetting(String key) async {
-    final db = await database;
-    final rows = await db.query('settings', where: 'key = ?', whereArgs: [key], limit: 1);
+    final rows = await (await database).query('settings', where: 'key = ?', whereArgs: [key], limit: 1);
     return rows.isEmpty ? null : rows.first['value'] as String;
   }
 
@@ -213,8 +212,7 @@ class AppDatabase {
   }
 
   Future<void> setSetting(String key, String value) async {
-    final db = await database;
-    await db.insert('settings', {'key': key, 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await (await database).insert('settings', {'key': key, 'value': value}, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<Subject>> getSubjects() async =>
@@ -250,8 +248,7 @@ class AppDatabase {
     return item;
   }
 
-  Future<void> deleteTask(int id) async =>
-      (await database).delete('tasks', where: 'id = ?', whereArgs: [id]);
+  Future<void> deleteTask(int id) async => (await database).delete('tasks', where: 'id = ?', whereArgs: [id]);
 
   Future<List<Grade>> getGrades() async =>
       (await (await database).query('grades', orderBy: 'date DESC')).map(Grade.fromMap).toList();
@@ -266,24 +263,19 @@ class AppDatabase {
     return item;
   }
 
-  Future<void> deleteGrade(int id) async =>
-      (await database).delete('grades', where: 'id = ?', whereArgs: [id]);
+  Future<void> deleteGrade(int id) async => (await database).delete('grades', where: 'id = ?', whereArgs: [id]);
 
   Future<List<ScheduleEntry>> getSchedules() async =>
       (await (await database).query('schedules', orderBy: 'day ASC, start_time ASC')).map(ScheduleEntry.fromMap).toList();
 
   Future<ScheduleEntry> saveSchedule(ScheduleEntry item) async {
     final db = await database;
-    if (item.id == null) {
-      final id = await db.insert('schedules', item.toMap());
-      return item.copyWith(id: id);
-    }
+    if (item.id == null) return item.copyWith(id: await db.insert('schedules', item.toMap()));
     await db.update('schedules', item.toMap(), where: 'id = ?', whereArgs: [item.id]);
     return item;
   }
 
-  Future<void> deleteSchedule(int id) async =>
-      (await database).delete('schedules', where: 'id = ?', whereArgs: [id]);
+  Future<void> deleteSchedule(int id) async => (await database).delete('schedules', where: 'id = ?', whereArgs: [id]);
 
   Future<List<ClassSession>> getClassSessions() async =>
       (await (await database).query('class_sessions', orderBy: 'date ASC, start_time ASC')).map(ClassSession.fromMap).toList();
@@ -292,14 +284,17 @@ class AppDatabase {
     final db = await database;
     if (item.id == null) {
       final id = await db.insert('class_sessions', item.toMap(), conflictAlgorithm: ConflictAlgorithm.ignore);
-      if (id == 0 && item.scheduleId != null) {
-        final rows = await db.query(
-          'class_sessions',
-          where: 'schedule_id = ? AND date = ?',
-          whereArgs: [item.scheduleId, _dateKey(item.date)],
-          limit: 1,
-        );
-        if (rows.isNotEmpty) return ClassSession.fromMap(rows.first);
+      if (id <= 0) {
+        if (item.scheduleId != null) {
+          final rows = await db.query(
+            'class_sessions',
+            where: 'schedule_id = ? AND date = ?',
+            whereArgs: [item.scheduleId, _dateKey(item.date)],
+            limit: 1,
+          );
+          if (rows.isNotEmpty) return ClassSession.fromMap(rows.first);
+        }
+        throw StateError('Não foi possível salvar a sessão de aula.');
       }
       return item.copyWith(id: id);
     }
@@ -318,13 +313,20 @@ class AppDatabase {
   }
 
   Future<void> deleteFutureSessionsForSchedule(int scheduleId, DateTime from) async {
+    final db = await database;
     final date = _dateKey(from);
     final time = _timeKey(from);
-    await (await database).delete(
-      'class_sessions',
-      where: 'schedule_id = ? AND status = ? AND (date > ? OR (date = ? AND start_time > ?))',
-      whereArgs: [scheduleId, AttendanceStatus.pending.index, date, date, time],
-    );
+    const predicate = 'schedule_id = ? AND status = ? AND (date > ? OR (date = ? AND start_time > ?))';
+    final args = [scheduleId, AttendanceStatus.pending.index, date, date, time];
+    await db.transaction((txn) async {
+      for (final table in const ['tasks', 'notes', 'materials']) {
+        await txn.execute(
+          'UPDATE $table SET session_id = NULL WHERE session_id IN (SELECT id FROM class_sessions WHERE $predicate)',
+          args,
+        );
+      }
+      await txn.delete('class_sessions', where: predicate, whereArgs: args);
+    });
   }
 
   Future<List<AcademicCalendarEvent>> getCalendarEvents() async =>
@@ -363,8 +365,7 @@ class AppDatabase {
     return item;
   }
 
-  Future<void> deleteNote(int id) async =>
-      (await database).delete('notes', where: 'id = ?', whereArgs: [id]);
+  Future<void> deleteNote(int id) async => (await database).delete('notes', where: 'id = ?', whereArgs: [id]);
 
   Future<List<MaterialResource>> getMaterials() async =>
       (await (await database).query('materials', orderBy: 'created_at DESC')).map(MaterialResource.fromMap).toList();
@@ -388,8 +389,7 @@ class AppDatabase {
     return item;
   }
 
-  Future<void> deleteMaterial(int id) async =>
-      (await database).delete('materials', where: 'id = ?', whereArgs: [id]);
+  Future<void> deleteMaterial(int id) async => (await database).delete('materials', where: 'id = ?', whereArgs: [id]);
 
   Future<void> clearAcademicData() async {
     final db = await database;
