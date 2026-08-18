@@ -40,18 +40,19 @@ class AppState extends ChangeNotifier {
 
   Future<void> initialize() async {
     await _db.database;
-    userName = await _db.getSetting('user_name') ?? '';
-    course = await _db.getSetting('course') ?? '';
-    period = await _db.getSetting('period') ?? '';
-    semester = await _db.getSetting('semester') ?? '';
-    isDark = (await _db.getSetting('dark_mode') ?? 'true') == 'true';
-    minGrade = double.tryParse(await _db.getSetting('min_grade') ?? '') ?? 6.0;
-    minAttendance = double.tryParse(await _db.getSetting('min_attendance') ?? '') ?? 75.0;
-    classRemindersEnabled = (await _db.getSetting('class_reminders') ?? 'true') == 'true';
-    attendanceCheckInEnabled = (await _db.getSetting('attendance_checkin') ?? 'true') == 'true';
-    endPendingReminderEnabled = (await _db.getSetting('end_pending_reminder') ?? 'true') == 'true';
-    endClassActionsEnabled = (await _db.getSetting('end_class_actions') ?? 'false') == 'true';
-    streakEnabled = (await _db.getSetting('attendance_streak') ?? 'true') == 'true';
+    final settings = await _db.getSettings();
+    userName = settings['user_name'] ?? '';
+    course = settings['course'] ?? '';
+    period = settings['period'] ?? '';
+    semester = settings['semester'] ?? '';
+    isDark = (settings['dark_mode'] ?? 'true') == 'true';
+    minGrade = double.tryParse(settings['min_grade'] ?? '') ?? 6.0;
+    minAttendance = double.tryParse(settings['min_attendance'] ?? '') ?? 75.0;
+    classRemindersEnabled = (settings['class_reminders'] ?? 'true') == 'true';
+    attendanceCheckInEnabled = (settings['attendance_checkin'] ?? 'true') == 'true';
+    endPendingReminderEnabled = (settings['end_pending_reminder'] ?? 'true') == 'true';
+    endClassActionsEnabled = (settings['end_class_actions'] ?? 'false') == 'true';
+    streakEnabled = (settings['attendance_streak'] ?? 'true') == 'true';
 
     await reloadAll(notify: false);
     await ensureRoutineSessions(notify: false);
@@ -86,11 +87,15 @@ class AppState extends ChangeNotifier {
   }
 
   void _projectAttendanceIntoSubjects() {
+    final sessionsBySubject = <int, List<ClassSession>>{};
+    for (final session in classSessions) {
+      (sessionsBySubject[session.subjectId] ??= []).add(session);
+    }
     subjects = subjects.map((subject) {
       if (subject.id == null) return subject;
       final baseTotal = _baselineTotalClasses[subject.id!] ?? subject.totalClasses;
       final baseAbsences = _baselineAbsences[subject.id!] ?? subject.absences;
-      final resolved = sessionsForSubject(subject.id!).where(
+      final resolved = (sessionsBySubject[subject.id!] ?? const <ClassSession>[]).where(
         (s) => s.status == AttendanceStatus.present || s.status == AttendanceStatus.absent,
       );
       final sessionTotal = resolved.fold<int>(0, (v, s) => v + s.classCount);
@@ -119,11 +124,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> updateThresholds(double grade, double attendance) async {
-    minGrade = grade;
-    minAttendance = attendance;
+    minGrade = grade.clamp(0, 10).toDouble();
+    minAttendance = attendance.clamp(0, 100).toDouble();
     await Future.wait([
-      _db.setSetting('min_grade', '$grade'),
-      _db.setSetting('min_attendance', '$attendance'),
+      _db.setSetting('min_grade', '$minGrade'),
+      _db.setSetting('min_attendance', '$minAttendance'),
     ]);
     notifyListeners();
   }
@@ -161,7 +166,7 @@ class AppState extends ChangeNotifier {
   }
 
   void setIndex(int index) {
-    currentIndex = index;
+    currentIndex = index.clamp(0, 4).toInt();
     notifyListeners();
   }
 
@@ -245,8 +250,9 @@ class AppState extends ChangeNotifier {
   double attendanceForSubject(Subject subject) => subject.attendance;
 
   double? get averageAttendance {
-    if (subjects.isEmpty) return null;
-    return subjects.fold<double>(0, (a, b) => a + b.attendance) / subjects.length;
+    final withHistory = subjects.where((subject) => subject.totalClasses > 0).toList();
+    if (withHistory.isEmpty) return null;
+    return withHistory.fold<double>(0, (a, b) => a + b.attendance) / withHistory.length;
   }
 
   double attendanceTarget(Subject subject) => subject.minAttendance ?? minAttendance;
@@ -255,7 +261,9 @@ class AppState extends ChangeNotifier {
 
   bool isSubjectAtRisk(Subject s) {
     final avg = s.id == null ? null : averageForSubject(s.id!);
-    return (avg != null && avg < minGrade) || s.attendance < attendanceTarget(s) || remainingAbsences(s) <= 1;
+    return (avg != null && avg < minGrade) ||
+        (s.totalClasses > 0 && s.attendance < attendanceTarget(s)) ||
+        remainingAbsences(s) <= 1;
   }
 
   int maxAbsences(Subject s) {
@@ -270,16 +278,17 @@ class AppState extends ChangeNotifier {
   }
 
   double simulatedAttendance(Subject subject, int additionalAbsences) {
+    final misses = additionalAbsences.clamp(0, 9999).toInt();
     final currentTotal = subject.totalClasses;
     final currentMisses = subject.absences;
-    final futureTotal = currentTotal + additionalAbsences;
+    final futureTotal = currentTotal + misses;
     if (futureTotal <= 0) return 100;
-    return ((futureTotal - currentMisses - additionalAbsences).clamp(0, futureTotal) / futureTotal) * 100;
+    return ((futureTotal - currentMisses - misses).clamp(0, futureTotal) / futureTotal) * 100;
   }
 
   String attendanceRiskLabel(Subject subject) {
     final remaining = remainingAbsences(subject);
-    if (subject.attendance < attendanceTarget(subject) || remaining == 0) return 'LIMITE';
+    if ((subject.totalClasses > 0 && subject.attendance < attendanceTarget(subject)) || remaining == 0) return 'LIMITE';
     if (remaining == 1) return 'RISCO';
     if (remaining <= 3) return 'ATENÇÃO';
     return 'SEGURO';
@@ -346,20 +355,26 @@ class AppState extends ChangeNotifier {
     final now = DateTime.now();
     final monday = DateTime(now.year, now.month, now.day).subtract(Duration(days: now.weekday - 1));
     final sundayEnd = monday.add(const Duration(days: 7));
-    final week = classSessions.where((s) => !s.date.isBefore(monday) && s.date.isBefore(sundayEnd)).toList();
+    final week = classSessions.where((s) =>
+        !s.date.isBefore(monday) &&
+        s.date.isBefore(sundayEnd) &&
+        s.status != AttendanceStatus.cancelled &&
+        !s.startsAt.isAfter(now)).toList();
     return {
-      'classes': week.where((s) => s.status != AttendanceStatus.cancelled).fold<int>(0, (v, s) => v + s.classCount),
+      'classes': week.fold<int>(0, (v, s) => v + s.classCount),
       'present': week.where((s) => s.status == AttendanceStatus.present).fold<int>(0, (v, s) => v + s.classCount),
       'absent': week.where((s) => s.status == AttendanceStatus.absent).fold<int>(0, (v, s) => v + s.classCount),
-      'pending': week.where((s) => s.status == AttendanceStatus.pending && !s.startsAt.isAfter(now)).fold<int>(0, (v, s) => v + s.classCount),
+      'pending': week.where((s) => s.status == AttendanceStatus.pending).fold<int>(0, (v, s) => v + s.classCount),
     };
   }
 
-  double get onTimeTaskRate {
+  double get taskCompletionRate {
     if (tasks.isEmpty) return 100;
     final done = tasks.where((t) => t.status == TaskStatus.done).length;
     return done / tasks.length * 100;
   }
+
+  double get onTimeTaskRate => taskCompletionRate;
 
   Future<Subject> saveSubject(Subject item, {bool preserveRoutineFields = true}) async {
     final existing = subjectById(item.id);
@@ -411,16 +426,27 @@ class AppState extends ChangeNotifier {
     await _rescheduleNotifications();
   }
 
-  Future<AcademicTask> saveTask(AcademicTask item) async {
+  Future<AcademicTask> saveTask(
+    AcademicTask item, {
+    bool reload = true,
+    bool scheduleNotification = true,
+    bool notify = true,
+  }) async {
     final previous = _taskById(item.id);
     if (item.id != null && item.sessionId == null && previous?.sessionId != null) {
       item = item.copyWith(sessionId: previous!.sessionId);
     }
     final saved = await _db.saveTask(item);
-    tasks = await _db.getTasks();
-    await notifications.scheduleTask(saved, subjectName(saved.subjectId));
-    notifyListeners();
+    if (reload) tasks = await _db.getTasks();
+    if (scheduleNotification) await notifications.scheduleTask(saved, subjectName(saved.subjectId));
+    if (notify) notifyListeners();
     return saved;
+  }
+
+  Future<void> refreshTasksAfterBatch({bool rescheduleNotifications = true}) async {
+    tasks = await _db.getTasks();
+    if (rescheduleNotifications) await _rescheduleNotifications();
+    notifyListeners();
   }
 
   Future<void> deleteTask(AcademicTask item) async {
@@ -434,9 +460,12 @@ class AppState extends ChangeNotifier {
   Future<void> moveTask(AcademicTask item, TaskStatus status) async => saveTask(item.copyWith(status: status));
 
   Future<void> toggleTaskStep(AcademicTask item, int step) async {
-    final c = [...item.completedSteps];
-    c.contains(step) ? c.remove(step) : c.add(step);
-    await saveTask(item.copyWith(completedSteps: c));
+    final latest = _taskById(item.id) ?? item;
+    if (step < 0 || step >= latest.checklist.length) return;
+    final completed = [...latest.completedSteps];
+    completed.contains(step) ? completed.remove(step) : completed.add(step);
+    completed.sort();
+    await saveTask(latest.copyWith(completedSteps: completed));
   }
 
   Future<Grade> saveGrade(Grade item) async {
@@ -454,9 +483,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<ScheduleEntry> saveSchedule(ScheduleEntry item) async {
+    _validateSchedule(item.day, item.start, item.end);
     if (item.id != null) await _db.deleteFutureSessionsForSchedule(item.id!, DateTime.now());
     final v = await _db.saveSchedule(item);
     schedules = await _db.getSchedules();
+    classSessions = await _db.getClassSessions();
     await ensureRoutineSessions(notify: false);
     if (classRemindersEnabled || attendanceCheckInEnabled || endPendingReminderEnabled || endClassActionsEnabled) {
       await notifications.requestPermission();
@@ -481,6 +512,9 @@ class AppState extends ChangeNotifier {
     await _db.deleteSchedule(item.id!);
     schedules = await _db.getSchedules();
     classSessions = await _db.getClassSessions();
+    tasks = await _db.getTasks();
+    notes = await _db.getNotes();
+    materials = await _db.getMaterials();
     _projectAttendanceIntoSubjects();
     await _rescheduleNotifications();
     notifyListeners();
@@ -502,8 +536,12 @@ class AppState extends ChangeNotifier {
     final today = DateTime.now();
     final start = DateTime(today.year, today.month, today.day);
     final end = start.add(const Duration(days: 61));
+    final schedulesByDay = <int, List<ScheduleEntry>>{};
+    for (final schedule in schedules) {
+      (schedulesByDay[schedule.day] ??= []).add(schedule);
+    }
     for (var date = start; !date.isAfter(end); date = date.add(const Duration(days: 1))) {
-      for (final schedule in schedules.where((s) => s.day == date.weekday)) {
+      for (final schedule in schedulesByDay[date.weekday] ?? const <ScheduleEntry>[]) {
         if (schedule.id == null || existing.contains('${schedule.id}:${_dateKey(date)}')) continue;
         if (_classBlocked(date, schedule.subjectId)) continue;
         final saved = await _db.saveClassSession(
@@ -531,6 +569,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<ClassSession> saveClassSession(ClassSession item) async {
+    _validateSchedule(item.date.weekday, item.start, item.end);
     final saved = await _db.saveClassSession(item);
     classSessions = await _db.getClassSessions();
     _projectAttendanceIntoSubjects();
@@ -541,7 +580,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> markAttendance(ClassSession session, AttendanceStatus status) async {
     if (session.id == null) return;
-    final updated = session.copyWith(status: status);
+    final current = sessionById(session.id) ?? session;
+    final updated = current.copyWith(status: status);
     await _db.saveClassSession(updated);
     await notifications.cancelClassSession(session.id!);
     classSessions = await _db.getClassSessions();
@@ -566,6 +606,9 @@ class AppState extends ChangeNotifier {
     await notifications.cancelClassSession(session.id!);
     await _db.deleteClassSession(session.id!);
     classSessions = await _db.getClassSessions();
+    tasks = await _db.getTasks();
+    notes = await _db.getNotes();
+    materials = await _db.getMaterials();
     _projectAttendanceIntoSubjects();
     notifyListeners();
   }
@@ -573,6 +616,7 @@ class AppState extends ChangeNotifier {
   Future<AcademicCalendarEvent> saveCalendarEvent(AcademicCalendarEvent item) async {
     final saved = await _db.saveCalendarEvent(item);
     calendarEvents = await _db.getCalendarEvents();
+    var detachedLinks = false;
     if (saved.blocksClasses) {
       final impacted = classSessions.where(
         (s) => s.kind == ClassSessionKind.regular &&
@@ -581,8 +625,16 @@ class AppState extends ChangeNotifier {
             (saved.subjectId == null || saved.subjectId == s.subjectId),
       ).toList();
       for (final s in impacted) {
-        if (s.id != null) await _db.deleteClassSession(s.id!);
+        if (s.id == null) continue;
+        await notifications.cancelClassSession(s.id!);
+        await _db.deleteClassSession(s.id!);
+        detachedLinks = true;
       }
+    }
+    if (detachedLinks) {
+      tasks = await _db.getTasks();
+      notes = await _db.getNotes();
+      materials = await _db.getMaterials();
     }
     await ensureRoutineSessions(notify: false);
     await _rescheduleNotifications();
@@ -715,6 +767,7 @@ class AppState extends ChangeNotifier {
     endPendingReminderEnabled = true;
     endClassActionsEnabled = false;
     streakEnabled = true;
+    highlightedSessionId = null;
     await reloadAll(notify: false);
     await _rescheduleNotifications();
     notifyListeners();
@@ -728,6 +781,24 @@ class AppStateScope extends InheritedNotifier<AppState> {
     assert(scope != null, 'AppStateScope não encontrado');
     return scope!.notifier!;
   }
+}
+
+void _validateSchedule(int day, String start, String end) {
+  if (day < 1 || day > 7) throw ArgumentError('Dia da semana inválido.');
+  final startMinutes = _timeMinutes(start);
+  final endMinutes = _timeMinutes(end);
+  if (startMinutes == null || endMinutes == null || endMinutes <= startMinutes) {
+    throw ArgumentError('O horário final deve ser posterior ao horário inicial.');
+  }
+}
+
+int? _timeMinutes(String value) {
+  final match = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(value.trim());
+  if (match == null) return null;
+  final hour = int.tryParse(match.group(1)!);
+  final minute = int.tryParse(match.group(2)!);
+  if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
 }
 
 bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
