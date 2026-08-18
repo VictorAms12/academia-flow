@@ -1,1 +1,2 @@
 Validação temporária da build Android v2.5.9+17.
+Reexecução após corrigir a fonte do ícone Android.
