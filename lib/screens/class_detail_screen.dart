@@ -15,105 +15,87 @@ class ClassDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
     final session = state.sessionById(sessionId);
-    if (session == null) {
-      return Scaffold(appBar: AppBar(title: const Text('Aula')), body: const Center(child: Text('Aula não encontrada.')));
-    }
+    if (session == null) return const Scaffold(body: Center(child: Text('Aula não encontrada.')));
+    final subject = state.subjectById(session.subjectId);
     final notes = state.notesForSession(sessionId);
     final materials = state.materialsForSession(sessionId);
     final tasks = state.tasksForSession(sessionId);
-    final subject = state.subjectById(session.subjectId);
     final now = DateTime.now();
-    final ended = now.isAfter(session.endsAt);
-
+    final started = !now.isBefore(session.startsAt);
+    final ended = !now.isBefore(session.endsAt);
     return Scaffold(
-      appBar: AppBar(title: Text(state.subjectName(session.subjectId))),
+      appBar: AppBar(title: Text(subject?.name ?? 'Aula')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SoftCard(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      _StatusBadge(session.status),
-                      _KindBadge(session.kind),
-                      GoldBadge('${session.classCount} aula${session.classCount == 1 ? '' : 's'}'),
-                    ]),
-                    const SizedBox(height: 15),
-                    Text(formatRoutineDate(session.date), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 6),
-                    Text('${session.start}–${session.end}${session.room.isEmpty ? '' : ' • ${session.room}'}', style: Theme.of(context).textTheme.titleMedium),
-                    if (subject?.professor.isNotEmpty == true) ...[
-                      const SizedBox(height: 4),
-                      Text(subject!.professor, style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                    const SizedBox(height: 18),
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      FilledButton.icon(
-                        onPressed: session.status == AttendanceStatus.present ? null : () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.present),
-                        icon: Icon(session.status == AttendanceStatus.present ? Icons.verified_rounded : Icons.check_rounded),
-                        label: Text(session.status == AttendanceStatus.present ? 'Presença registrada' : 'Presente'),
-                      ),
-                      FilledButton.tonalIcon(
-                        onPressed: session.status == AttendanceStatus.absent ? null : () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.absent),
-                        icon: const Icon(Icons.close_rounded),
-                        label: Text(session.status == AttendanceStatus.absent ? 'Falta registrada' : 'Faltei'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: session.status == AttendanceStatus.cancelled ? null : () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.cancelled),
-                        icon: const Icon(Icons.event_busy_rounded),
-                        label: Text(session.status == AttendanceStatus.cancelled ? 'Aula cancelada' : 'Cancelada'),
-                      ),
-                    ]),
+            constraints: const BoxConstraints(maxWidth: 920),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SoftCard(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    GoldBadge(session.kind == ClassSessionKind.regular ? 'AULA' : session.kind == ClassSessionKind.makeup ? 'REPOSIÇÃO' : 'EXTRA'),
+                    const Spacer(),
+                    _StatusBadge(session.status),
                   ]),
-                ),
-                const SizedBox(height: 16),
-                if (ended)
-                  SoftCard(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const SectionTitle('Aula encerrada'),
-                      const SizedBox(height: 8),
-                      const Text('Registre o que surgiu desta aula sem precisar procurar outra tela.'),
-                      const SizedBox(height: 12),
-                      Wrap(spacing: 8, runSpacing: 8, children: [
-                        FilledButton.tonalIcon(onPressed: () => showSessionNoteEditor(context, state, session), icon: const Icon(Icons.note_add_outlined), label: const Text('Anotação')),
-                        FilledButton.tonalIcon(onPressed: () => showSessionMaterialEditor(context, state, session), icon: const Icon(Icons.link_rounded), label: const Text('Material')),
-                        FilledButton.tonalIcon(onPressed: () => showSessionTaskEditor(context, state, session), icon: const Icon(Icons.add_task_rounded), label: const Text('Criar atividade')),
-                        if (session.status == AttendanceStatus.cancelled)
-                          OutlinedButton.icon(onPressed: () => showExtraClassEditor(context, state, kind: ClassSessionKind.makeup, makeupFor: session), icon: const Icon(Icons.replay_rounded), label: const Text('Criar reposição')),
-                      ]),
+                  const SizedBox(height: 14),
+                  Text('${formatRoutineDate(session.date)} • ${session.start}–${session.end}', style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 5),
+                  Text('${session.classCount} aula${session.classCount == 1 ? '' : 's'}${session.room.isEmpty ? '' : ' • ${session.room}'}', style: Theme.of(context).textTheme.bodyMedium),
+                  if (session.note.isNotEmpty) ...[
+                    const SizedBox(height: 9),
+                    Text(session.note, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                  if (!started && session.status == AttendanceStatus.pending) ...[
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      Icon(Icons.schedule_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 7),
+                      Expanded(child: Text('A presença fica disponível quando a aula começar.', style: Theme.of(context).textTheme.bodySmall)),
                     ]),
-                  ),
-                const SizedBox(height: 16),
-                _LinkedSection(
-                  title: 'Anotações da aula',
-                  empty: 'Nenhuma anotação vinculada.',
-                  action: TextButton.icon(onPressed: () => showSessionNoteEditor(context, state, session), icon: const Icon(Icons.add_rounded), label: const Text('Adicionar')),
-                  children: [for (final note in notes) ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.notes_rounded), title: Text(note.title), subtitle: note.content.isEmpty ? null : Text(note.content, maxLines: 2, overflow: TextOverflow.ellipsis))],
-                ),
-                const SizedBox(height: 16),
-                _LinkedSection(
-                  title: 'Materiais desta aula',
-                  empty: 'Nenhum material vinculado.',
-                  action: TextButton.icon(onPressed: () => showSessionMaterialEditor(context, state, session), icon: const Icon(Icons.add_rounded), label: const Text('Adicionar')),
-                  children: [for (final item in materials) ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.attach_file_rounded), title: Text(item.title), subtitle: item.url.isEmpty ? null : Text(item.url, maxLines: 1, overflow: TextOverflow.ellipsis))],
-                ),
-                const SizedBox(height: 16),
-                _LinkedSection(
-                  title: 'Atividades originadas aqui',
-                  empty: 'Nenhuma atividade criada a partir desta aula.',
-                  action: TextButton.icon(onPressed: () => showSessionTaskEditor(context, state, session), icon: const Icon(Icons.add_rounded), label: const Text('Criar')),
-                  children: [for (final task in tasks) ListTile(contentPadding: EdgeInsets.zero, leading: Icon(task.status == TaskStatus.done ? Icons.task_alt_rounded : Icons.task_outlined), title: Text(task.title), subtitle: Text('Prazo ${formatRoutineDate(task.dueDate)}'))],
-                ),
-                if (session.note.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const SectionTitle('Observação'), const SizedBox(height: 8), Text(session.note)])),
-                ],
+                  ],
+                  const SizedBox(height: 18),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    FilledButton.icon(
+                      onPressed: !started || session.status == AttendanceStatus.present ? null : () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.present),
+                      icon: Icon(session.status == AttendanceStatus.present ? Icons.verified_rounded : Icons.check_rounded),
+                      label: Text(session.status == AttendanceStatus.present ? 'Presença registrada' : 'Presente'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: !started || session.status == AttendanceStatus.absent ? null : () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.absent),
+                      icon: const Icon(Icons.close_rounded),
+                      label: Text(session.status == AttendanceStatus.absent ? 'Falta registrada' : 'Faltei'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: session.status == AttendanceStatus.cancelled ? null : () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.cancelled),
+                      icon: const Icon(Icons.event_busy_rounded),
+                      label: Text(session.status == AttendanceStatus.cancelled ? 'Aula cancelada' : 'Cancelada'),
+                    ),
+                  ]),
+                ]),
+              ),
+              const SizedBox(height: 16),
+              SectionTitle('Conteúdo da aula', trailing: Wrap(spacing: 5, children: [
+                IconButton.filledTonal(tooltip: 'Anotação', onPressed: () => showSessionNoteEditor(context, state, session), icon: const Icon(Icons.note_add_outlined)),
+                IconButton.filledTonal(tooltip: 'Material', onPressed: () => showSessionMaterialEditor(context, state, session), icon: const Icon(Icons.attach_file_rounded)),
+                IconButton.filledTonal(tooltip: 'Atividade', onPressed: () => showSessionTaskEditor(context, state, session), icon: const Icon(Icons.add_task_rounded)),
+              ])),
+              const SizedBox(height: 10),
+              if (notes.isEmpty && materials.isEmpty && tasks.isEmpty)
+                EmptyState(icon: Icons.auto_stories_outlined, title: ended ? 'Feche o ciclo desta aula' : 'Prepare esta aula', message: ended ? 'Adicione uma anotação, material ou nova atividade antes de seguir.' : 'Você pode vincular materiais e anotações a esta aula desde já.')
+              else ...[
+                if (notes.isNotEmpty) _Group(title: 'Anotações', icon: Icons.notes_rounded, children: [for (final item in notes) ListTile(contentPadding: EdgeInsets.zero, title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w900)), subtitle: item.content.isEmpty ? null : Text(item.content, maxLines: 3, overflow: TextOverflow.ellipsis))]),
+                if (materials.isNotEmpty) _Group(title: 'Materiais', icon: Icons.attach_file_rounded, children: [for (final item in materials) ListTile(contentPadding: EdgeInsets.zero, title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w900)), subtitle: Text(item.url.isEmpty ? item.description : item.url, maxLines: 2, overflow: TextOverflow.ellipsis))]),
+                if (tasks.isNotEmpty) _Group(title: 'Atividades', icon: Icons.task_alt_rounded, children: [for (final item in tasks) ListTile(contentPadding: EdgeInsets.zero, title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.w900)), subtitle: Text('Prazo ${formatRoutineDate(item.dueDate)} • ${item.status == TaskStatus.done ? 'Concluída' : 'Pendente'}'))]),
               ],
-            ),
+              if (session.status == AttendanceStatus.cancelled && session.kind == ClassSessionKind.regular) ...[
+                const SizedBox(height: 16),
+                SoftCard(child: Row(children: [
+                  const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Precisa repor esta aula?', style: TextStyle(fontWeight: FontWeight.w900)), SizedBox(height: 4), Text('Crie uma reposição vinculada a este encontro.')])),
+                  FilledButton.tonalIcon(onPressed: () => showExtraClassEditor(context, state, kind: ClassSessionKind.makeup, makeupFor: session), icon: const Icon(Icons.replay_rounded), label: const Text('Reposição')),
+                ])),
+              ],
+            ]),
           ),
         ),
       ),
@@ -121,20 +103,13 @@ class ClassDetailScreen extends StatelessWidget {
   }
 }
 
-class _LinkedSection extends StatelessWidget {
-  const _LinkedSection({required this.title, required this.empty, required this.action, required this.children});
+class _Group extends StatelessWidget {
+  const _Group({required this.title, required this.icon, required this.children});
   final String title;
-  final String empty;
-  final Widget action;
+  final IconData icon;
   final List<Widget> children;
   @override
-  Widget build(BuildContext context) => SoftCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SectionTitle(title, trailing: action),
-          const SizedBox(height: 8),
-          if (children.isEmpty) Text(empty, style: Theme.of(context).textTheme.bodySmall) else ...children,
-        ]),
-      );
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 12), child: SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [Icon(icon, size: 18), const SizedBox(width: 7), Text(title, style: const TextStyle(fontWeight: FontWeight.w900))]), const SizedBox(height: 6), ...children])));
 }
 
 class _StatusBadge extends StatelessWidget {
@@ -142,28 +117,12 @@ class _StatusBadge extends StatelessWidget {
   final AttendanceStatus status;
   @override
   Widget build(BuildContext context) {
-    final label = switch (status) {
-      AttendanceStatus.present => 'PRESENTE',
-      AttendanceStatus.absent => 'FALTA',
-      AttendanceStatus.cancelled => 'CANCELADA',
-      AttendanceStatus.pending => 'PENDENTE',
-    };
-    final color = switch (status) {
-      AttendanceStatus.present => AppColors.success,
-      AttendanceStatus.absent => AppColors.danger,
-      AttendanceStatus.cancelled => Colors.grey,
-      AttendanceStatus.pending => AppColors.gold,
+    final (label, color) = switch (status) {
+      AttendanceStatus.present => ('PRESENTE', AppColors.success),
+      AttendanceStatus.absent => ('FALTA', AppColors.danger),
+      AttendanceStatus.cancelled => ('CANCELADA', Colors.grey),
+      AttendanceStatus.pending => ('PENDENTE', AppColors.gold),
     };
     return Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(20)), child: Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w900)));
-  }
-}
-
-class _KindBadge extends StatelessWidget {
-  const _KindBadge(this.kind);
-  final ClassSessionKind kind;
-  @override
-  Widget build(BuildContext context) {
-    final label = switch (kind) { ClassSessionKind.regular => 'REGULAR', ClassSessionKind.extra => 'EXTRA', ClassSessionKind.makeup => 'REPOSIÇÃO' };
-    return Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)), child: Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900)));
   }
 }

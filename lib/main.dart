@@ -28,17 +28,25 @@ class _AcademiaFlowStartup extends StatefulWidget {
 }
 
 class _AcademiaFlowStartupState extends State<_AcademiaFlowStartup> {
-  late final Future<void> _initialization;
+  late Future<void> _initialization;
 
   @override
   void initState() {
     super.initState();
+    _startInitialization();
+  }
+
+  void _startInitialization() {
     _initialization = widget.state.initialize().timeout(
       const Duration(seconds: 20),
       onTimeout: () => throw Exception(
-        'A inicialização ultrapassou 20 segundos. Verifique acesso ao banco local e reinicie o aplicativo.',
+        'A inicialização ultrapassou 20 segundos. Verifique acesso ao banco local e tente novamente.',
       ),
     );
+  }
+
+  void _retry() {
+    setState(_startInitialization);
   }
 
   @override
@@ -101,9 +109,15 @@ class _AcademiaFlowStartupState extends State<_AcademiaFlowStartup> {
                           textAlign: TextAlign.center,
                           style: const TextStyle(fontSize: 12, height: 1.45),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 18),
+                        FilledButton.icon(
+                          onPressed: _retry,
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Tentar novamente'),
+                        ),
+                        const SizedBox(height: 10),
                         const Text(
-                          'Feche o Academia Flow pelo Gerenciador de Tarefas, abra novamente e, se o erro persistir, copie a mensagem acima.',
+                          'Se o erro persistir, feche o Academia Flow completamente e copie a mensagem acima para diagnóstico.',
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 12),
                         ),

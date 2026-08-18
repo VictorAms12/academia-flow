@@ -12,6 +12,8 @@ class NotificationService {
 
   final fln.FlutterLocalNotificationsPlugin _plugin = fln.FlutterLocalNotificationsPlugin();
   bool _ready = false;
+  bool _unavailable = false;
+  String? lastError;
 
   Future<void> Function(String actionId, String payload)? onRoutineAction;
   Future<void> Function(String payload)? onNotificationTap;
@@ -62,6 +64,7 @@ class NotificationService {
   );
 
   bool get _portableWindows => Platform.isWindows;
+  bool get available => !_unavailable;
 
   Future<void> initialize() async {
     if (_ready) return;
@@ -70,47 +73,84 @@ class NotificationService {
       return;
     }
 
-    tz.initializeTimeZones();
     try {
-      final info = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(info.identifier));
-    } catch (_) {}
+      tz.initializeTimeZones();
+      try {
+        final info = await FlutterTimezone.getLocalTimezone();
+        tz.setLocalLocation(tz.getLocation(info.identifier));
+      } catch (error) {
+        _recordError(error);
+      }
 
-    await _plugin.initialize(
-      settings: const fln.InitializationSettings(
-        android: fln.AndroidInitializationSettings('ic_stat_academia_flow'),
-      ),
-      onDidReceiveNotificationResponse: _handleResponse,
-    );
-    _ready = true;
+      await _plugin.initialize(
+        settings: const fln.InitializationSettings(
+          android: fln.AndroidInitializationSettings('ic_stat_academia_flow'),
+        ),
+        onDidReceiveNotificationResponse: _handleResponse,
+      );
+      _ready = true;
 
-    final launch = await _plugin.getNotificationAppLaunchDetails();
-    final response = launch?.notificationResponse;
-    if (launch?.didNotificationLaunchApp == true && response != null) {
-      await _handleResponse(response);
+      try {
+        final launch = await _plugin.getNotificationAppLaunchDetails();
+        final response = launch?.notificationResponse;
+        if (launch?.didNotificationLaunchApp == true && response != null) {
+          await _handleResponse(response);
+        }
+      } catch (error) {
+        _recordError(error);
+      }
+    } catch (error) {
+      // Notificações são um recurso auxiliar. Uma falha do plugin/recurso do
+      // Android nunca deve impedir o Academia Flow de abrir e acessar os dados.
+      _unavailable = true;
+      _ready = true;
+      _recordError(error);
     }
   }
 
   Future<void> _handleResponse(fln.NotificationResponse response) async {
     final payload = response.payload ?? '';
-    if (response.actionId?.startsWith('routine_') == true && payload.startsWith('session:')) {
-      await onRoutineAction?.call(response.actionId!, payload);
-      return;
+    try {
+      if (response.actionId?.startsWith('routine_') == true && payload.startsWith('session:')) {
+        await onRoutineAction?.call(response.actionId!, payload);
+        return;
+      }
+      if (payload.isNotEmpty) await onNotificationTap?.call(payload);
+    } catch (error) {
+      _recordError(error);
     }
-    if (payload.isNotEmpty) await onNotificationTap?.call(payload);
   }
 
   Future<bool> requestPermission() async {
     await initialize();
     if (_portableWindows) return true;
-    final android = _plugin.resolvePlatformSpecificImplementation<fln.AndroidFlutterLocalNotificationsPlugin>();
-    return await android?.requestNotificationsPermission() ?? true;
+    if (_unavailable) return false;
+    try {
+      final android = _plugin.resolvePlatformSpecificImplementation<fln.AndroidFlutterLocalNotificationsPlugin>();
+      return await android?.requestNotificationsPermission() ?? true;
+    } catch (error) {
+      _recordError(error);
+      return false;
+    }
   }
 
   Future<void> scheduleTask(AcademicTask task, String subjectName) async {
     await initialize();
-    if (_portableWindows || task.id == null) return;
-    await cancelTask(task.id!);
+    if (_portableWindows || _unavailable || task.id == null) return;
+    try {
+      await _scheduleTask(task, subjectName, cancelExisting: true);
+    } catch (error) {
+      _recordError(error);
+    }
+  }
+
+  Future<void> _scheduleTask(
+    AcademicTask task,
+    String subjectName, {
+    required bool cancelExisting,
+  }) async {
+    if (task.id == null) return;
+    if (cancelExisting) await _cancelTaskUnsafe(task.id!);
     if (!task.reminderEnabled || task.status == TaskStatus.done) return;
 
     final due = tz.TZDateTime(tz.local, task.dueDate.year, task.dueDate.month, task.dueDate.day, 9);
@@ -140,7 +180,15 @@ class NotificationService {
 
   Future<void> cancelTask(int taskId) async {
     await initialize();
-    if (_portableWindows) return;
+    if (_portableWindows || _unavailable) return;
+    try {
+      await _cancelTaskUnsafe(taskId);
+    } catch (error) {
+      _recordError(error);
+    }
+  }
+
+  Future<void> _cancelTaskUnsafe(int taskId) async {
     for (var i = 1; i <= 4; i++) {
       await _plugin.cancel(id: taskId * 10 + i);
     }
@@ -157,21 +205,41 @@ class NotificationService {
     required bool endClassActionsEnabled,
   }) async {
     await initialize();
-    if (_portableWindows) return;
-    await _plugin.cancelAllPendingNotifications();
-    for (final task in tasks) {
-      await scheduleTask(task, subjectName(task.subjectId));
+    if (_portableWindows || _unavailable) return;
+
+    try {
+      await _plugin.cancelAllPendingNotifications();
+    } catch (error) {
+      _recordError(error);
+      return;
     }
+
+    for (final task in tasks) {
+      if (!task.reminderEnabled || task.status == TaskStatus.done || task.id == null) continue;
+      try {
+        await _scheduleTask(task, subjectName(task.subjectId), cancelExisting: false);
+      } catch (error) {
+        _recordError(error);
+      }
+    }
+
+    final now = DateTime.now();
     for (final session in sessions) {
-      await scheduleClassSession(
-        session,
-        subjectName(session.subjectId),
-        reminderMinutes: reminderMinutesForSchedule(session.scheduleId),
-        classRemindersEnabled: classRemindersEnabled,
-        attendanceCheckInEnabled: attendanceCheckInEnabled,
-        endPendingReminderEnabled: endPendingReminderEnabled,
-        endClassActionsEnabled: endClassActionsEnabled,
-      );
+      if (session.id == null || session.status == AttendanceStatus.cancelled || !session.endsAt.isAfter(now)) continue;
+      if (session.status != AttendanceStatus.pending && !endClassActionsEnabled) continue;
+      try {
+        await _scheduleClassSession(
+          session,
+          subjectName(session.subjectId),
+          reminderMinutes: reminderMinutesForSchedule(session.scheduleId),
+          classRemindersEnabled: classRemindersEnabled,
+          attendanceCheckInEnabled: attendanceCheckInEnabled,
+          endPendingReminderEnabled: endPendingReminderEnabled,
+          endClassActionsEnabled: endClassActionsEnabled,
+        );
+      } catch (error) {
+        _recordError(error);
+      }
     }
   }
 
@@ -185,7 +253,31 @@ class NotificationService {
     required bool endClassActionsEnabled,
   }) async {
     await initialize();
-    if (_portableWindows || session.id == null || session.status == AttendanceStatus.cancelled) return;
+    if (_portableWindows || _unavailable || session.id == null || session.status == AttendanceStatus.cancelled) return;
+    try {
+      await _scheduleClassSession(
+        session,
+        subjectName,
+        reminderMinutes: reminderMinutes,
+        classRemindersEnabled: classRemindersEnabled,
+        attendanceCheckInEnabled: attendanceCheckInEnabled,
+        endPendingReminderEnabled: endPendingReminderEnabled,
+        endClassActionsEnabled: endClassActionsEnabled,
+      );
+    } catch (error) {
+      _recordError(error);
+    }
+  }
+
+  Future<void> _scheduleClassSession(
+    ClassSession session,
+    String subjectName, {
+    required int reminderMinutes,
+    required bool classRemindersEnabled,
+    required bool attendanceCheckInEnabled,
+    required bool endPendingReminderEnabled,
+    required bool endClassActionsEnabled,
+  }) async {
     final now = tz.TZDateTime.now(tz.local);
     final start = _tzFrom(session.startsAt);
     final end = _tzFrom(session.endsAt);
@@ -244,17 +336,30 @@ class NotificationService {
 
   Future<void> cancelClassSession(int sessionId) async {
     await initialize();
-    if (_portableWindows) return;
-    final base = 1000000 + sessionId * 10;
-    for (var i = 1; i <= 4; i++) {
-      await _plugin.cancel(id: base + i);
+    if (_portableWindows || _unavailable) return;
+    try {
+      final base = 1000000 + sessionId * 10;
+      for (var i = 1; i <= 4; i++) {
+        await _plugin.cancel(id: base + i);
+      }
+    } catch (error) {
+      _recordError(error);
     }
   }
 
   Future<int> pendingCount() async {
     await initialize();
-    if (_portableWindows) return 0;
-    return (await _plugin.pendingNotificationRequests()).length;
+    if (_portableWindows || _unavailable) return 0;
+    try {
+      return (await _plugin.pendingNotificationRequests()).length;
+    } catch (error) {
+      _recordError(error);
+      return 0;
+    }
+  }
+
+  void _recordError(Object error) {
+    lastError = error.toString();
   }
 
   tz.TZDateTime _tzFrom(DateTime value) => tz.TZDateTime(

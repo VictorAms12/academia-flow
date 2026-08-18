@@ -13,7 +13,11 @@ Future<void> markAttendanceWithFeedback(
   await state.markAttendance(session, status);
   if (!context.mounted) return;
 
-  await HapticFeedback.selectionClick();
+  // Há aparelhos/ambientes desktop que não oferecem feedback háptico. Isso é
+  // opcional e nunca deve impedir a confirmação visual após o dado já ter sido salvo.
+  try {
+    await HapticFeedback.selectionClick();
+  } catch (_) {}
 
   final count = session.classCount;
   final classesLabel = '$count aula${count == 1 ? '' : 's'}';

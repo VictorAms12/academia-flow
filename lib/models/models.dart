@@ -62,12 +62,12 @@ class Subject {
 
   factory Subject.fromMap(Map<String, Object?> map) => Subject(
         id: map['id'] as int?,
-        name: map['name'] as String,
-        professor: (map['professor'] as String?) ?? '',
-        room: (map['room'] as String?) ?? '',
-        totalClasses: (map['total_classes'] as int?) ?? 0,
-        plannedClasses: (map['planned_classes'] as int?) ?? 0,
-        absences: (map['absences'] as int?) ?? 0,
+        name: _text(map['name']),
+        professor: _text(map['professor']),
+        room: _text(map['room']),
+        totalClasses: _nonNegativeInt(map['total_classes']),
+        plannedClasses: _nonNegativeInt(map['planned_classes']),
+        absences: _nonNegativeInt(map['absences']),
         minAttendance: (map['min_attendance'] as num?)?.toDouble(),
       );
 }
@@ -151,20 +151,28 @@ class AcademicTask {
         'session_id': sessionId,
       };
 
-  factory AcademicTask.fromMap(Map<String, Object?> map) => AcademicTask(
-        id: map['id'] as int?,
-        title: map['title'] as String,
-        subjectId: map['subject_id'] as int?,
-        dueDate: DateTime.parse(map['due_date'] as String),
-        priority: Priority.values[(map['priority'] as int?) ?? 1],
-        status: TaskStatus.values[(map['status'] as int?) ?? 0],
-        kind: TaskKind.values[(map['kind'] as int?) ?? 0],
-        reminderEnabled: ((map['reminder_enabled'] as int?) ?? 1) == 1,
-        description: (map['description'] as String?) ?? '',
-        checklist: List<String>.from(jsonDecode((map['checklist'] as String?) ?? '[]') as List),
-        completedSteps: List<int>.from(jsonDecode((map['completed_steps'] as String?) ?? '[]') as List),
-        sessionId: map['session_id'] as int?,
-      );
+  factory AcademicTask.fromMap(Map<String, Object?> map) {
+    final checklist = _stringList(map['checklist']);
+    final completed = _intList(map['completed_steps'])
+        .where((index) => index >= 0 && index < checklist.length)
+        .toSet()
+        .toList()
+      ..sort();
+    return AcademicTask(
+      id: map['id'] as int?,
+      title: _text(map['title']),
+      subjectId: map['subject_id'] as int?,
+      dueDate: _date(map['due_date']),
+      priority: _enumValue(Priority.values, map['priority'], Priority.medium),
+      status: _enumValue(TaskStatus.values, map['status'], TaskStatus.todo),
+      kind: _enumValue(TaskKind.values, map['kind'], TaskKind.activity),
+      reminderEnabled: _boolInt(map['reminder_enabled'], fallback: true),
+      description: _text(map['description']),
+      checklist: checklist,
+      completedSteps: completed,
+      sessionId: map['session_id'] as int?,
+    );
+  }
 }
 
 class Grade {
@@ -175,8 +183,24 @@ class Grade {
   final double value;
   final double weight;
   final DateTime date;
-  Map<String, Object?> toMap() => {if (id != null) 'id': id, 'subject_id': subjectId, 'title': title, 'value': value, 'weight': weight, 'date': date.toIso8601String()};
-  factory Grade.fromMap(Map<String, Object?> map) => Grade(id: map['id'] as int?, subjectId: map['subject_id'] as int, title: map['title'] as String, value: (map['value'] as num).toDouble(), weight: (map['weight'] as num?)?.toDouble() ?? 1, date: DateTime.parse(map['date'] as String));
+
+  Map<String, Object?> toMap() => {
+        if (id != null) 'id': id,
+        'subject_id': subjectId,
+        'title': title,
+        'value': value,
+        'weight': weight,
+        'date': date.toIso8601String(),
+      };
+
+  factory Grade.fromMap(Map<String, Object?> map) => Grade(
+        id: map['id'] as int?,
+        subjectId: (map['subject_id'] as num?)?.toInt() ?? 0,
+        title: _text(map['title']),
+        value: (map['value'] as num?)?.toDouble() ?? 0,
+        weight: ((map['weight'] as num?)?.toDouble() ?? 1).clamp(0.0001, double.infinity),
+        date: _date(map['date']),
+      );
 }
 
 class ScheduleEntry {
@@ -230,15 +254,16 @@ class ScheduleEntry {
         'class_count': classCount,
         'reminder_minutes': reminderMinutes,
       };
+
   factory ScheduleEntry.fromMap(Map<String, Object?> map) => ScheduleEntry(
         id: map['id'] as int?,
-        subjectId: map['subject_id'] as int,
-        day: map['day'] as int,
-        start: map['start_time'] as String,
-        end: map['end_time'] as String,
-        room: (map['room'] as String?) ?? '',
-        classCount: (map['class_count'] as int?) ?? 1,
-        reminderMinutes: (map['reminder_minutes'] as int?) ?? 10,
+        subjectId: (map['subject_id'] as num?)?.toInt() ?? 0,
+        day: ((map['day'] as num?)?.toInt() ?? 1).clamp(1, 7),
+        start: _timeText(map['start_time'], fallback: '19:00'),
+        end: _timeText(map['end_time'], fallback: '20:40'),
+        room: _text(map['room']),
+        classCount: ((map['class_count'] as num?)?.toInt() ?? 1).clamp(1, 8),
+        reminderMinutes: ((map['reminder_minutes'] as num?)?.toInt() ?? 10).clamp(0, 120),
       );
 }
 
@@ -330,18 +355,18 @@ class ClassSession {
 
   factory ClassSession.fromMap(Map<String, Object?> map) => ClassSession(
         id: map['id'] as int?,
-        subjectId: map['subject_id'] as int,
+        subjectId: (map['subject_id'] as num?)?.toInt() ?? 0,
         scheduleId: map['schedule_id'] as int?,
-        date: DateTime.parse(map['date'] as String),
-        start: map['start_time'] as String,
-        end: map['end_time'] as String,
-        room: (map['room'] as String?) ?? '',
-        classCount: (map['class_count'] as int?) ?? 1,
-        status: AttendanceStatus.values[(map['status'] as int?) ?? 0],
-        kind: ClassSessionKind.values[(map['kind'] as int?) ?? 0],
-        note: (map['note'] as String?) ?? '',
+        date: _date(map['date']),
+        start: _timeText(map['start_time'], fallback: '00:00'),
+        end: _timeText(map['end_time'], fallback: '00:01'),
+        room: _text(map['room']),
+        classCount: ((map['class_count'] as num?)?.toInt() ?? 1).clamp(1, 8),
+        status: _enumValue(AttendanceStatus.values, map['status'], AttendanceStatus.pending),
+        kind: _enumValue(ClassSessionKind.values, map['kind'], ClassSessionKind.regular),
+        note: _text(map['note']),
         makeupForSessionId: map['makeup_for_session_id'] as int?,
-        createdAt: DateTime.parse(map['created_at'] as String),
+        createdAt: _date(map['created_at']),
       );
 }
 
@@ -389,13 +414,14 @@ class AcademicCalendarEvent {
         'subject_id': subjectId,
         'blocks_classes': blocksClasses ? 1 : 0,
       };
+
   factory AcademicCalendarEvent.fromMap(Map<String, Object?> map) => AcademicCalendarEvent(
         id: map['id'] as int?,
-        date: DateTime.parse(map['date'] as String),
-        title: map['title'] as String,
-        kind: AcademicEventKind.values[(map['kind'] as int?) ?? 4],
+        date: _date(map['date']),
+        title: _text(map['title']),
+        kind: _enumValue(AcademicEventKind.values, map['kind'], AcademicEventKind.academicEvent),
         subjectId: map['subject_id'] as int?,
-        blocksClasses: ((map['blocks_classes'] as int?) ?? 0) == 1,
+        blocksClasses: _boolInt(map['blocks_classes']),
       );
 }
 
@@ -420,6 +446,7 @@ class AcademicNote {
   final bool pinned;
   final DateTime createdAt;
   final int? sessionId;
+
   Map<String, Object?> toMap() => {
         if (id != null) 'id': id,
         'subject_id': subjectId,
@@ -431,15 +458,16 @@ class AcademicNote {
         'created_at': createdAt.toIso8601String(),
         'session_id': sessionId,
       };
+
   factory AcademicNote.fromMap(Map<String, Object?> map) => AcademicNote(
         id: map['id'] as int?,
         subjectId: map['subject_id'] as int?,
-        title: map['title'] as String,
-        content: (map['content'] as String?) ?? '',
-        link: (map['link'] as String?) ?? '',
-        tags: (map['tags'] as String?) ?? '',
-        pinned: ((map['pinned'] as int?) ?? 0) == 1,
-        createdAt: DateTime.parse(map['created_at'] as String),
+        title: _text(map['title']),
+        content: _text(map['content']),
+        link: _text(map['link']),
+        tags: _text(map['tags']),
+        pinned: _boolInt(map['pinned']),
+        createdAt: _date(map['created_at']),
         sessionId: map['session_id'] as int?,
       );
 }
@@ -465,6 +493,7 @@ class MaterialResource {
   final MaterialKind kind;
   final DateTime createdAt;
   final int? sessionId;
+
   Map<String, Object?> toMap() => {
         if (id != null) 'id': id,
         'subject_id': subjectId,
@@ -475,23 +504,72 @@ class MaterialResource {
         'created_at': createdAt.toIso8601String(),
         'session_id': sessionId,
       };
+
   factory MaterialResource.fromMap(Map<String, Object?> map) => MaterialResource(
         id: map['id'] as int?,
-        subjectId: map['subject_id'] as int,
-        title: map['title'] as String,
-        url: (map['url'] as String?) ?? '',
-        description: (map['description'] as String?) ?? '',
-        kind: MaterialKind.values[(map['kind'] as int?) ?? 2],
-        createdAt: DateTime.parse(map['created_at'] as String),
+        subjectId: (map['subject_id'] as num?)?.toInt() ?? 0,
+        title: _text(map['title']),
+        url: _text(map['url']),
+        description: _text(map['description']),
+        kind: _enumValue(MaterialKind.values, map['kind'], MaterialKind.link),
+        createdAt: _date(map['created_at']),
         sessionId: map['session_id'] as int?,
       );
 }
 
+T _enumValue<T>(List<T> values, Object? raw, T fallback) {
+  final index = raw is num ? raw.toInt() : int.tryParse('$raw');
+  if (index == null || index < 0 || index >= values.length) return fallback;
+  return values[index];
+}
+
+String _text(Object? value) => value?.toString() ?? '';
+int _nonNegativeInt(Object? value) => ((value as num?)?.toInt() ?? int.tryParse('$value') ?? 0).clamp(0, 1 << 31);
+bool _boolInt(Object? value, {bool fallback = false}) {
+  if (value == null) return fallback;
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  final text = value.toString().toLowerCase();
+  if (text == 'true' || text == '1') return true;
+  if (text == 'false' || text == '0') return false;
+  return fallback;
+}
+
+DateTime _date(Object? value) => DateTime.tryParse(_text(value)) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+List<String> _stringList(Object? raw) {
+  try {
+    final decoded = jsonDecode(_text(raw).isEmpty ? '[]' : _text(raw));
+    if (decoded is! List) return const [];
+    return decoded.map((e) => e?.toString().trim() ?? '').where((e) => e.isNotEmpty).toList();
+  } catch (_) {
+    return const [];
+  }
+}
+
+List<int> _intList(Object? raw) {
+  try {
+    final decoded = jsonDecode(_text(raw).isEmpty ? '[]' : _text(raw));
+    if (decoded is! List) return const [];
+    return decoded.map((e) => e is num ? e.toInt() : int.tryParse('$e')).whereType<int>().toList();
+  } catch (_) {
+    return const [];
+  }
+}
+
+String _timeText(Object? raw, {required String fallback}) {
+  final value = _text(raw).trim();
+  final match = RegExp(r'^(\d{1,2}):(\d{1,2})$').firstMatch(value);
+  if (match == null) return fallback;
+  final hour = int.tryParse(match.group(1) ?? '');
+  final minute = int.tryParse(match.group(2) ?? '');
+  if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return fallback;
+  return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+}
+
 DateTime _combine(DateTime date, String hhmm) {
-  final p = hhmm.split(':');
-  final h = int.tryParse(p.first) ?? 0;
-  final m = p.length > 1 ? int.tryParse(p[1]) ?? 0 : 0;
-  return DateTime(date.year, date.month, date.day, h, m);
+  final safe = _timeText(hhmm, fallback: '00:00').split(':');
+  return DateTime(date.year, date.month, date.day, int.parse(safe[0]), int.parse(safe[1]));
 }
 
 String _dateKey(DateTime date) =>

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../integrations/google/google_integration_controller.dart';
@@ -22,12 +24,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController minGrade;
   late TextEditingController minAttendance;
   bool _controllersReady = false;
+  bool _googleInitStarted = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_controllersReady) return;
     final state = AppStateScope.of(context);
+    if (!_googleInitStarted) {
+      _googleInitStarted = true;
+      // initialize() apenas recupera o perfil persistido/local. Não dispara
+      // seletor de conta nem autenticação interativa.
+      unawaited(GoogleIntegrationController.instance.initialize(state));
+    }
+    if (_controllersReady) return;
     name = TextEditingController(text: state.userName);
     course = TextEditingController(text: state.course);
     period = TextEditingController(text: state.period);
@@ -234,30 +243,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _resetEverything(BuildContext context, AppState state) async {
     final text = TextEditingController();
-    final ok = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Redefinir aplicativo?'),
-            content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Tudo será apagado, inclusive perfil, conexão Google e configurações. Digite APAGAR para confirmar.'),
-              const SizedBox(height: 12),
-              TextField(controller: text, decoration: const InputDecoration(hintText: 'APAGAR')),
-            ]),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-                onPressed: () => Navigator.pop(dialogContext, text.text.trim().toUpperCase() == 'APAGAR'),
-                child: const Text('Redefinir'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    text.dispose();
-    if (!ok) return;
-    await GoogleIntegrationController.instance.clearLocalIntegration();
-    await state.resetEverything();
-    if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    try {
+      final ok = await showDialog<bool>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('Redefinir aplicativo?'),
+              content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Tudo será apagado, inclusive perfil, conexão Google e configurações. Digite APAGAR para confirmar.'),
+                const SizedBox(height: 12),
+                TextField(controller: text, decoration: const InputDecoration(hintText: 'APAGAR')),
+              ]),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+                  onPressed: () => Navigator.pop(dialogContext, text.text.trim().toUpperCase() == 'APAGAR'),
+                  child: const Text('Redefinir'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!ok) return;
+      await GoogleIntegrationController.instance.clearLocalIntegration();
+      await state.resetEverything();
+      if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } finally {
+      text.dispose();
+    }
   }
 }

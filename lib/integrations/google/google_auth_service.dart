@@ -25,6 +25,7 @@ class GoogleAuthService {
   static const _tokenEndpoint = 'https://oauth2.googleapis.com/token';
   static const _revokeEndpoint = 'https://oauth2.googleapis.com/revoke';
   static const _userInfoEndpoint = 'https://openidconnect.googleapis.com/v1/userinfo';
+  static const _networkTimeout = Duration(seconds: 20);
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final http.Client _http = http.Client();
@@ -88,9 +89,6 @@ class GoogleAuthService {
     if (Platform.isAndroid) {
       await _initializeAndroid();
 
-      // Enquanto o processo do app estiver vivo, a conta real do plugin é a
-      // melhor fonte: authorizationForScopes não mostra UI quando a autorização
-      // já existe.
       final account = _androidAccount;
       if (account != null) {
         final profile = _fromAndroidAccount(account);
@@ -104,12 +102,6 @@ class GoogleAuthService {
       }
 
       final remembered = await _readRememberedAndroidProfile();
-
-      // Após o Android matar o processo, não temos mais um GoogleSignInAccount
-      // Dart. Em vez de abrir o Credential Manager para reconstruí-lo, fazemos
-      // a mesma solicitação silenciosa do plugin diretamente, mas informando o
-      // ID e e-mail da conta já escolhida. promptIfUnauthorized=false garante
-      // que esta tentativa não abra seletor nem consentimento.
       if (remembered != null) {
         final silent = await _androidAuthorizationForProfile(
           remembered,
@@ -121,8 +113,6 @@ class GoogleAuthService {
         }
       }
 
-      // Fallback para reaberturas muito recentes: reutiliza apenas token salvo
-      // recentemente. Tokens antigos nunca são usados como sessão permanente.
       final recentToken = await _readRecentAndroidAccessToken();
       if (recentToken != null) return recentToken;
 
@@ -130,9 +120,6 @@ class GoogleAuthService {
         throw StateError('A autorização do Google Classroom precisa ser renovada.');
       }
 
-      // Se a autorização realmente precisar de interação, ainda direcionamos
-      // o pedido para a conta já salva. Isso evita um seletor de contas apenas
-      // para escolher novamente a mesma conta.
       if (remembered != null) {
         final granted = await _androidAuthorizationForProfile(
           remembered,
@@ -144,8 +131,6 @@ class GoogleAuthService {
         }
       }
 
-      // Último recurso: só há novo login quando não existe mais uma conta
-      // persistida/autorização recuperável.
       final signedIn = await _googleSignIn.authenticate(
         scopeHint: GoogleOAuthConfig.classroomScopes,
       );
@@ -153,14 +138,12 @@ class GoogleAuthService {
       final profile = _fromAndroidAccount(signedIn);
       await _saveRememberedAndroidProfile(profile);
       final client = signedIn.authorizationClient;
-      final cachedAfterLogin =
-          await client.authorizationForScopes(GoogleOAuthConfig.classroomScopes);
+      final cachedAfterLogin = await client.authorizationForScopes(GoogleOAuthConfig.classroomScopes);
       if (cachedAfterLogin != null) {
         await _saveAndroidAccessToken(cachedAfterLogin.accessToken);
         return cachedAfterLogin.accessToken;
       }
-      final grantedAfterLogin =
-          await client.authorizeScopes(GoogleOAuthConfig.classroomScopes);
+      final grantedAfterLogin = await client.authorizeScopes(GoogleOAuthConfig.classroomScopes);
       await _saveAndroidAccessToken(grantedAfterLogin.accessToken);
       return grantedAfterLogin.accessToken;
     }
@@ -249,7 +232,9 @@ class GoogleAuthService {
       final refreshToken = await _secureStorage.read(key: _refreshTokenKey);
       if (revoke && refreshToken != null && refreshToken.isNotEmpty) {
         try {
-          await _http.post(Uri.parse(_revokeEndpoint), body: {'token': refreshToken});
+          await _http
+              .post(Uri.parse(_revokeEndpoint), body: {'token': refreshToken})
+              .timeout(const Duration(seconds: 10));
         } catch (_) {}
       }
       await _secureStorage.delete(key: _refreshTokenKey);
@@ -319,20 +304,23 @@ class GoogleAuthService {
       );
 
   Future<GoogleAccountProfile> _fetchUserInfo(String accessToken) async {
-    final response = await _http.get(
-      Uri.parse(_userInfoEndpoint),
-      headers: {'Authorization': 'Bearer $accessToken'},
-    );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Não foi possível ler o perfil Google (${response.statusCode}).');
+    try {
+      final response = await _http
+          .get(Uri.parse(_userInfoEndpoint), headers: {'Authorization': 'Bearer $accessToken'})
+          .timeout(_networkTimeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError('Não foi possível ler o perfil Google (${response.statusCode}).');
+      }
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      return GoogleAccountProfile(
+        id: '${json['sub'] ?? ''}',
+        email: '${json['email'] ?? ''}',
+        displayName: '${json['name'] ?? ''}',
+        photoUrl: '${json['picture'] ?? ''}',
+      );
+    } on TimeoutException {
+      throw StateError('O Google demorou demais para responder. Verifique a conexão e tente novamente.');
     }
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    return GoogleAccountProfile(
-      id: '${json['sub'] ?? ''}',
-      email: '${json['email'] ?? ''}',
-      displayName: '${json['name'] ?? ''}',
-      photoUrl: '${json['picture'] ?? ''}',
-    );
   }
 
   Future<_DesktopOAuthResult> _authorizeDesktop(List<String> scopes) async {
@@ -385,7 +373,7 @@ class GoogleAuthService {
       if (GoogleOAuthConfig.desktopClientSecret.trim().isNotEmpty) {
         body['client_secret'] = GoogleOAuthConfig.desktopClientSecret;
       }
-      final response = await _http.post(Uri.parse(_tokenEndpoint), body: body);
+      final response = await _http.post(Uri.parse(_tokenEndpoint), body: body).timeout(_networkTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError('Falha ao concluir OAuth Google (${response.statusCode}).');
       }
@@ -402,6 +390,8 @@ class GoogleAuthService {
       }
       await _writeDesktopScopes(_desktopGrantedScopes);
       return _DesktopOAuthResult(accessToken: accessToken);
+    } on TimeoutException {
+      throw StateError('O Google demorou demais para concluir o login. Tente novamente.');
     } finally {
       await server.close(force: true);
     }
@@ -416,17 +406,21 @@ class GoogleAuthService {
     if (GoogleOAuthConfig.desktopClientSecret.trim().isNotEmpty) {
       body['client_secret'] = GoogleOAuthConfig.desktopClientSecret;
     }
-    final response = await _http.post(Uri.parse(_tokenEndpoint), body: body);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('A sessão Google expirou. Entre novamente.');
+    try {
+      final response = await _http.post(Uri.parse(_tokenEndpoint), body: body).timeout(_networkTimeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError('A sessão Google expirou. Entre novamente.');
+      }
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final accessToken = '${json['access_token'] ?? ''}';
+      if (accessToken.isEmpty) throw StateError('Não foi possível renovar a sessão Google.');
+      final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
+      _desktopAccessToken = accessToken;
+      _desktopAccessTokenExpiry = DateTime.now().add(Duration(seconds: expiresIn));
+      return accessToken;
+    } on TimeoutException {
+      throw StateError('Não foi possível renovar a sessão Google a tempo. Verifique a conexão.');
     }
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    final accessToken = '${json['access_token'] ?? ''}';
-    if (accessToken.isEmpty) throw StateError('Não foi possível renovar a sessão Google.');
-    final expiresIn = (json['expires_in'] as num?)?.toInt() ?? 3600;
-    _desktopAccessToken = accessToken;
-    _desktopAccessTokenExpiry = DateTime.now().add(Duration(seconds: expiresIn));
-    return accessToken;
   }
 
   Future<Set<String>> _readDesktopScopes() async {
