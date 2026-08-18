@@ -1,12 +1,10 @@
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 root = Path('android')
 app_gradle = root / 'app' / 'build.gradle.kts'
 text = app_gradle.read_text()
-text = text.replace('namespace = "com.example.academia_flow"', 'namespace = "com.example.academia_flow"')
-text = text.replace('applicationId = "com.example.academia_flow"', 'applicationId = "com.example.academia_flow"')
 
 if 'isCoreLibraryDesugaringEnabled = true' not in text:
     text = text.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', 1)
@@ -22,25 +20,83 @@ if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' not in te
     text += '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
 app_gradle.write_text(text)
 
-# Branding Android. O arquivo mantém a extensão histórica .jpg, mas o Pillow
-# detecta o formato real pelo cabeçalho. Esta é a arte válida usada nas builds
-# anteriores; os PNGs de launcher são sempre regenerados abaixo.
-icon_source = Path('tool/branding/academia_flow_icon.jpg')
-if not icon_source.exists():
-    raise FileNotFoundError(f'Ícone do Academia Flow não encontrado: {icon_source}')
-
 res = root / 'app' / 'src' / 'main' / 'res'
-with Image.open(icon_source) as icon:
-    source = icon.convert('RGBA')
 
-# Mantém o chapéu em escala menor e completa qualquer área excedente com preto.
-side = max(source.width, source.height)
-square = Image.new('RGBA', (side, side), (0, 0, 0, 255))
-source.thumbnail((int(side * 0.76), int(side * 0.76)), Image.Resampling.LANCZOS)
-x = (side - source.width) // 2
-y = (side - source.height) // 2
-square.alpha_composite(source, (x, y))
-source = square
+# O launcher é gerado de forma determinística durante a build: fundo preto
+# puro e chapéu de formatura dourado em escala contida, semelhante ao símbolo
+# utilizado na UI. Isso evita depender de assets binários históricos corrompidos.
+def draw_cap(canvas_size: int, *, transparent: bool) -> Image.Image:
+    bg = (0, 0, 0, 0) if transparent else (0, 0, 0, 255)
+    image = Image.new('RGBA', (canvas_size, canvas_size), bg)
+    draw = ImageDraw.Draw(image)
+
+    gold = (214, 175, 55, 255)
+    gold_light = (235, 199, 76, 255)
+    gold_dark = (155, 119, 31, 255)
+    shadow = (0, 0, 0, 70)
+
+    # Área útil do símbolo: ~52% do ícone, deixando bastante respiro.
+    cx = canvas_size / 2
+    cap_w = canvas_size * 0.52
+    top_y = canvas_size * 0.35
+    top_h = canvas_size * 0.19
+
+    # Sombra discreta abaixo do chapéu.
+    draw.ellipse(
+        (cx - cap_w * 0.34, canvas_size * 0.61, cx + cap_w * 0.34, canvas_size * 0.69),
+        fill=shadow,
+    )
+
+    # Aba superior em losango.
+    left = (cx - cap_w / 2, top_y + top_h / 2)
+    top = (cx, top_y)
+    right = (cx + cap_w / 2, top_y + top_h / 2)
+    bottom = (cx, top_y + top_h)
+    draw.polygon([left, top, right, bottom], fill=gold)
+    draw.line([left, top, right], fill=gold_light, width=max(1, round(canvas_size * 0.012)))
+    draw.line([left, bottom, right], fill=gold_dark, width=max(1, round(canvas_size * 0.010)))
+
+    # Corpo/base do chapéu.
+    base_left = cx - cap_w * 0.30
+    base_right = cx + cap_w * 0.30
+    base_top = canvas_size * 0.50
+    base_bottom = canvas_size * 0.62
+    radius = max(2, round(canvas_size * 0.025))
+    draw.rounded_rectangle(
+        (base_left, base_top, base_right, base_bottom),
+        radius=radius,
+        fill=gold_dark,
+        outline=gold,
+        width=max(1, round(canvas_size * 0.010)),
+    )
+    draw.polygon(
+        [
+            (base_left, base_top),
+            (cx, base_top + canvas_size * 0.055),
+            (base_right, base_top),
+            (base_right, base_top + canvas_size * 0.045),
+            (cx, base_top + canvas_size * 0.095),
+            (base_left, base_top + canvas_size * 0.045),
+        ],
+        fill=gold,
+    )
+
+    # Botão central e tassel do lado direito.
+    button_r = canvas_size * 0.025
+    draw.ellipse((cx - button_r, top_y + top_h * 0.44 - button_r, cx + button_r, top_y + top_h * 0.44 + button_r), fill=gold_light)
+    tassel_start = (cx + button_r * 0.5, top_y + top_h * 0.46)
+    tassel_mid = (cx + cap_w * 0.34, top_y + top_h * 0.68)
+    tassel_end = (cx + cap_w * 0.34, canvas_size * 0.59)
+    line_w = max(2, round(canvas_size * 0.022))
+    draw.line([tassel_start, tassel_mid, tassel_end], fill=gold, width=line_w, joint='curve')
+    tassel_r = canvas_size * 0.026
+    draw.ellipse((tassel_end[0] - tassel_r, tassel_end[1] - tassel_r, tassel_end[0] + tassel_r, tassel_end[1] + tassel_r), fill=gold_light)
+    fringe_y = tassel_end[1] + tassel_r * 0.75
+    for offset in (-1.4, -0.7, 0, 0.7, 1.4):
+        x = tassel_end[0] + offset * tassel_r * 0.45
+        draw.line((x, fringe_y, x + offset * tassel_r * 0.12, fringe_y + canvas_size * 0.065), fill=gold, width=max(1, round(canvas_size * 0.009)))
+
+    return image
 
 legacy_sizes = {
     'mdpi': 48,
@@ -70,20 +126,13 @@ for density, size in legacy_sizes.items():
         if old.exists():
             old.unlink()
 
-    legacy = source.resize((size, size), Image.Resampling.LANCZOS)
+    legacy = draw_cap(size, transparent=False)
     legacy.save(mipmap_dir / 'ic_launcher.png', format='PNG', optimize=True)
     legacy.save(mipmap_dir / 'ic_launcher_round.png', format='PNG', optimize=True)
 
     foreground_size = adaptive_sizes[density]
-    foreground = source.resize(
-        (foreground_size, foreground_size),
-        Image.Resampling.LANCZOS,
-    )
-    foreground.save(
-        mipmap_dir / 'ic_launcher_foreground.png',
-        format='PNG',
-        optimize=True,
-    )
+    foreground = draw_cap(foreground_size, transparent=True)
+    foreground.save(mipmap_dir / 'ic_launcher_foreground.png', format='PNG', optimize=True)
 
 values_dir = res / 'values'
 values_dir.mkdir(parents=True, exist_ok=True)
@@ -124,11 +173,8 @@ if 'android.permission.RECEIVE_BOOT_COMPLETED' not in m:
     )
 m = m.replace('android:label="academia_flow"', 'android:label="Academia Flow"')
 
-m = m.replace('android:icon="@drawable/academia_flow_icon"', 'android:icon="@mipmap/ic_launcher"')
 if 'android:icon="@mipmap/ic_launcher"' not in m:
     m = m.replace('<application', '<application\n        android:icon="@mipmap/ic_launcher"', 1)
-
-m = m.replace('android:roundIcon="@drawable/academia_flow_icon"', 'android:roundIcon="@mipmap/ic_launcher_round"')
 if 'android:roundIcon=' not in m:
     m = m.replace(
         'android:icon="@mipmap/ic_launcher"',
@@ -147,4 +193,4 @@ if 'ScheduledNotificationReceiver' not in m:
     m = m.replace('    </application>', receivers + '    </application>')
 manifest.write_text(m)
 
-print('Android configurado: assinatura persistente, notificações e launcher PNG/adaptativo Academia Flow.')
+print('Android configurado: assinatura persistente, notificações e launcher gerado nativamente.')
