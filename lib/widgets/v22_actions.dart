@@ -29,142 +29,150 @@ Future<void> showTaskEditor(
   bool reminders = task?.reminderEnabled ?? true;
   DateTime dueDate = task?.dueDate ?? DateTime.now().add(const Duration(days: 7));
 
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setLocal) => AlertDialog(
-        title: Text(task == null ? 'Novo prazo' : 'Editar prazo'),
-        content: SizedBox(
-          width: 540,
-          child: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: title,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Título *'),
-                    validator: (v) => v == null || v.trim().isEmpty ? 'Informe o título' : null,
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<TaskKind>(
-                    initialValue: kind,
-                    decoration: const InputDecoration(labelText: 'Tipo'),
-                    items: TaskKind.values.map((e) => DropdownMenuItem(value: e, child: Text(taskKindLabel(e)))).toList(),
-                    onChanged: (v) => setLocal(() => kind = v ?? kind),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<int?>(
-                    initialValue: subjectId,
-                    decoration: const InputDecoration(labelText: 'Matéria'),
-                    items: [
-                      const DropdownMenuItem<int?>(value: null, child: Text('Sem matéria')),
-                      ...state.subjects.map((s) => DropdownMenuItem<int?>(value: s.id, child: Text(s.name))),
-                    ],
-                    onChanged: (v) => setLocal(() => subjectId = v),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(
-                      child: DropdownButtonFormField<Priority>(
-                        initialValue: priority,
-                        decoration: const InputDecoration(labelText: 'Prioridade'),
-                        items: const [
-                          DropdownMenuItem(value: Priority.high, child: Text('Alta')),
-                          DropdownMenuItem(value: Priority.medium, child: Text('Média')),
-                          DropdownMenuItem(value: Priority.low, child: Text('Baixa')),
-                        ],
-                        onChanged: (v) => setLocal(() => priority = v ?? priority),
+  try {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text(task == null ? 'Novo prazo' : 'Editar prazo'),
+          content: SizedBox(
+            width: 540,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: title,
+                      autofocus: true,
+                      decoration: const InputDecoration(labelText: 'Título *'),
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Informe o título' : null,
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<TaskKind>(
+                      initialValue: kind,
+                      decoration: const InputDecoration(labelText: 'Tipo'),
+                      items: TaskKind.values.map((e) => DropdownMenuItem(value: e, child: Text(taskKindLabel(e)))).toList(),
+                      onChanged: (v) => setLocal(() => kind = v ?? kind),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<int?>(
+                      initialValue: subjectId,
+                      decoration: const InputDecoration(labelText: 'Matéria'),
+                      items: [
+                        const DropdownMenuItem<int?>(value: null, child: Text('Sem matéria')),
+                        ...state.subjects.map((s) => DropdownMenuItem<int?>(value: s.id, child: Text(s.name))),
+                      ],
+                      onChanged: (v) => setLocal(() => subjectId = v),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(
+                        child: DropdownButtonFormField<Priority>(
+                          initialValue: priority,
+                          decoration: const InputDecoration(labelText: 'Prioridade'),
+                          items: const [
+                            DropdownMenuItem(value: Priority.high, child: Text('Alta')),
+                            DropdownMenuItem(value: Priority.medium, child: Text('Média')),
+                            DropdownMenuItem(value: Priority.low, child: Text('Baixa')),
+                          ],
+                          onChanged: (v) => setLocal(() => priority = v ?? priority),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButtonFormField<TaskStatus>(
+                          initialValue: status,
+                          decoration: const InputDecoration(labelText: 'Status'),
+                          items: const [
+                            DropdownMenuItem(value: TaskStatus.todo, child: Text('A fazer')),
+                            DropdownMenuItem(value: TaskStatus.doing, child: Text('Em andamento')),
+                            DropdownMenuItem(value: TaskStatus.done, child: Text('Concluído')),
+                          ],
+                          onChanged: (v) => setLocal(() => status = v ?? status),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () async {
+                        final selected = await showDatePicker(
+                          context: context,
+                          initialDate: dueDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (selected != null) setLocal(() => dueDate = selected);
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: 'Prazo'),
+                        child: Text(_formatDate(dueDate)),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: DropdownButtonFormField<TaskStatus>(
-                        initialValue: status,
-                        decoration: const InputDecoration(labelText: 'Status'),
-                        items: const [
-                          DropdownMenuItem(value: TaskStatus.todo, child: Text('A fazer')),
-                          DropdownMenuItem(value: TaskStatus.doing, child: Text('Em andamento')),
-                          DropdownMenuItem(value: TaskStatus.done, child: Text('Concluído')),
-                        ],
-                        onChanged: (v) => setLocal(() => status = v ?? status),
-                      ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: reminders,
+                      title: const Text('Lembretes automáticos'),
+                      subtitle: const Text('7 dias, 3 dias, 1 dia e no dia do prazo'),
+                      onChanged: (v) => setLocal(() => reminders = v),
                     ),
-                  ]),
-                  const SizedBox(height: 10),
-                  InkWell(
-                    onTap: () async {
-                      final selected = await showDatePicker(
-                        context: context,
-                        initialDate: dueDate,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
-                      );
-                      if (selected != null) setLocal(() => dueDate = selected);
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(labelText: 'Prazo'),
-                      child: Text(_formatDate(dueDate)),
+                    TextFormField(
+                      controller: description,
+                      minLines: 2,
+                      maxLines: 5,
+                      decoration: const InputDecoration(labelText: 'Descrição / orientações'),
                     ),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: reminders,
-                    title: const Text('Lembretes automáticos'),
-                    subtitle: const Text('7 dias, 3 dias, 1 dia e no dia do prazo'),
-                    onChanged: (v) => setLocal(() => reminders = v),
-                  ),
-                  TextFormField(
-                    controller: description,
-                    minLines: 2,
-                    maxLines: 5,
-                    decoration: const InputDecoration(labelText: 'Descrição / orientações'),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: checklist,
-                    minLines: 2,
-                    maxLines: 6,
-                    decoration: const InputDecoration(labelText: 'Checklist', hintText: 'Uma etapa por linha'),
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: checklist,
+                      minLines: 2,
+                      maxLines: 6,
+                      decoration: const InputDecoration(labelText: 'Checklist', hintText: 'Uma etapa por linha'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () async {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                final steps = checklist.text.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                final completed = _preserveCompletedSteps(task, steps);
+                if (reminders) await state.notifications.requestPermission();
+                await state.saveTask(
+                  AcademicTask(
+                    id: task?.id,
+                    title: title.text.trim(),
+                    subjectId: subjectId,
+                    dueDate: dueDate,
+                    priority: priority,
+                    status: status,
+                    kind: kind,
+                    reminderEnabled: reminders,
+                    description: description.text.trim(),
+                    checklist: steps,
+                    completedSteps: completed,
+                    sessionId: task?.sessionId,
+                  ),
+                );
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () async {
-              if (!(formKey.currentState?.validate() ?? false)) return;
-              final steps = checklist.text.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-              final completed = task?.completedSteps.where((i) => i < steps.length).toList() ?? <int>[];
-              if (reminders) await state.notifications.requestPermission();
-              await state.saveTask(
-                AcademicTask(
-                  id: task?.id,
-                  title: title.text.trim(),
-                  subjectId: subjectId,
-                  dueDate: dueDate,
-                  priority: priority,
-                  status: status,
-                  kind: kind,
-                  reminderEnabled: reminders,
-                  description: description.text.trim(),
-                  checklist: steps,
-                  completedSteps: completed,
-                ),
-              );
-              if (dialogContext.mounted) Navigator.pop(dialogContext);
-            },
-            child: const Text('Salvar'),
-          ),
-        ],
       ),
-    ),
-  );
+    );
+  } finally {
+    title.dispose();
+    description.dispose();
+    checklist.dispose();
+  }
 }
 
 Future<void> showNoteEditor(BuildContext context, AppState state, {AcademicNote? note, int? presetSubjectId}) async {
@@ -176,50 +184,67 @@ Future<void> showNoteEditor(BuildContext context, AppState state, {AcademicNote?
   bool pinned = note?.pinned ?? false;
   final formKey = GlobalKey<FormState>();
 
-  await showDialog<void>(
-    context: context,
-    builder: (dc) => StatefulBuilder(
-      builder: (context, setLocal) => AlertDialog(
-        title: Text(note == null ? 'Nova anotação' : 'Editar anotação'),
-        content: SizedBox(
-          width: 560,
-          child: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                TextFormField(controller: title, autofocus: true, decoration: const InputDecoration(labelText: 'Título *'), validator: (v) => v == null || v.trim().isEmpty ? 'Informe o título' : null),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<int?>(
-                  initialValue: subjectId,
-                  decoration: const InputDecoration(labelText: 'Matéria'),
-                  items: [const DropdownMenuItem<int?>(value: null, child: Text('Geral')), ...state.subjects.map((s) => DropdownMenuItem<int?>(value: s.id, child: Text(s.name)))],
-                  onChanged: (v) => setLocal(() => subjectId = v),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(controller: content, minLines: 6, maxLines: 14, decoration: const InputDecoration(labelText: 'Conteúdo', hintText: 'Resumo, tópicos, fórmulas, checklist de revisão...')),
-                const SizedBox(height: 10),
-                TextFormField(controller: tags, decoration: const InputDecoration(labelText: 'Tags', hintText: 'prova, revisão, importante')),
-                const SizedBox(height: 10),
-                TextFormField(controller: link, decoration: const InputDecoration(labelText: 'Link relacionado')),
-                SwitchListTile(contentPadding: EdgeInsets.zero, value: pinned, title: const Text('Fixar anotação'), onChanged: (v) => setLocal(() => pinned = v)),
-              ]),
+  try {
+    await showDialog<void>(
+      context: context,
+      builder: (dc) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text(note == null ? 'Nova anotação' : 'Editar anotação'),
+          content: SizedBox(
+            width: 560,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextFormField(controller: title, autofocus: true, decoration: const InputDecoration(labelText: 'Título *'), validator: (v) => v == null || v.trim().isEmpty ? 'Informe o título' : null),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<int?>(
+                    initialValue: subjectId,
+                    decoration: const InputDecoration(labelText: 'Matéria'),
+                    items: [const DropdownMenuItem<int?>(value: null, child: Text('Geral')), ...state.subjects.map((s) => DropdownMenuItem<int?>(value: s.id, child: Text(s.name)))],
+                    onChanged: (v) => setLocal(() => subjectId = v),
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(controller: content, minLines: 6, maxLines: 14, decoration: const InputDecoration(labelText: 'Conteúdo', hintText: 'Resumo, tópicos, fórmulas, checklist de revisão...')),
+                  const SizedBox(height: 10),
+                  TextFormField(controller: tags, decoration: const InputDecoration(labelText: 'Tags', hintText: 'prova, revisão, importante')),
+                  const SizedBox(height: 10),
+                  TextFormField(controller: link, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Link relacionado')),
+                  SwitchListTile(contentPadding: EdgeInsets.zero, value: pinned, title: const Text('Fixar anotação'), onChanged: (v) => setLocal(() => pinned = v)),
+                ]),
+              ),
             ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dc), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () async {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                await state.saveNote(AcademicNote(
+                  id: note?.id,
+                  subjectId: subjectId,
+                  title: title.text.trim(),
+                  content: content.text.trim(),
+                  link: link.text.trim(),
+                  tags: tags.text.trim(),
+                  pinned: pinned,
+                  createdAt: note?.createdAt ?? DateTime.now(),
+                  sessionId: note?.sessionId,
+                ));
+                if (dc.mounted) Navigator.pop(dc);
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dc), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () async {
-              if (!(formKey.currentState?.validate() ?? false)) return;
-              await state.saveNote(AcademicNote(id: note?.id, subjectId: subjectId, title: title.text.trim(), content: content.text.trim(), link: link.text.trim(), tags: tags.text.trim(), pinned: pinned, createdAt: note?.createdAt ?? DateTime.now()));
-              if (dc.mounted) Navigator.pop(dc);
-            },
-            child: const Text('Salvar'),
-          ),
-        ],
       ),
-    ),
-  );
+    );
+  } finally {
+    title.dispose();
+    content.dispose();
+    link.dispose();
+    tags.dispose();
+  }
 }
 
 Future<void> showMaterialEditor(BuildContext context, AppState state, {MaterialResource? material, int? presetSubjectId}) async {
@@ -234,42 +259,59 @@ Future<void> showMaterialEditor(BuildContext context, AppState state, {MaterialR
   MaterialKind kind = material?.kind ?? MaterialKind.link;
   final formKey = GlobalKey<FormState>();
 
-  await showDialog<void>(
-    context: context,
-    builder: (dc) => StatefulBuilder(
-      builder: (context, setLocal) => AlertDialog(
-        title: Text(material == null ? 'Novo material' : 'Editar material'),
-        content: SizedBox(
-          width: 520,
-          child: Form(
-            key: formKey,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(controller: title, decoration: const InputDecoration(labelText: 'Título *'), validator: (v) => v == null || v.trim().isEmpty ? 'Informe o título' : null),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<int>(initialValue: subjectId, decoration: const InputDecoration(labelText: 'Matéria'), items: state.subjects.map((s) => DropdownMenuItem(value: s.id!, child: Text(s.name))).toList(), onChanged: (v) => setLocal(() => subjectId = v ?? subjectId)),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<MaterialKind>(initialValue: kind, decoration: const InputDecoration(labelText: 'Tipo'), items: MaterialKind.values.map((e) => DropdownMenuItem(value: e, child: Text(materialKindLabel(e)))).toList(), onChanged: (v) => setLocal(() => kind = v ?? kind)),
-              const SizedBox(height: 10),
-              TextFormField(controller: url, decoration: const InputDecoration(labelText: 'Link / caminho', hintText: 'PDF, Drive, YouTube, GitHub, site...')),
-              const SizedBox(height: 10),
-              TextFormField(controller: description, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Descrição')),
-            ]),
+  try {
+    await showDialog<void>(
+      context: context,
+      builder: (dc) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: Text(material == null ? 'Novo material' : 'Editar material'),
+          content: SizedBox(
+            width: 520,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextFormField(controller: title, decoration: const InputDecoration(labelText: 'Título *'), validator: (v) => v == null || v.trim().isEmpty ? 'Informe o título' : null),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<int>(initialValue: subjectId, decoration: const InputDecoration(labelText: 'Matéria'), items: state.subjects.map((s) => DropdownMenuItem(value: s.id!, child: Text(s.name))).toList(), onChanged: (v) => setLocal(() => subjectId = v ?? subjectId)),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<MaterialKind>(initialValue: kind, decoration: const InputDecoration(labelText: 'Tipo'), items: MaterialKind.values.map((e) => DropdownMenuItem(value: e, child: Text(materialKindLabel(e)))).toList(), onChanged: (v) => setLocal(() => kind = v ?? kind)),
+                  const SizedBox(height: 10),
+                  TextFormField(controller: url, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Link / caminho', hintText: 'PDF, Drive, YouTube, GitHub, site...')),
+                  const SizedBox(height: 10),
+                  TextFormField(controller: description, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Descrição')),
+                ]),
+              ),
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dc), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () async {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                await state.saveMaterial(MaterialResource(
+                  id: material?.id,
+                  subjectId: subjectId,
+                  title: title.text.trim(),
+                  url: url.text.trim(),
+                  description: description.text.trim(),
+                  kind: kind,
+                  createdAt: material?.createdAt ?? DateTime.now(),
+                  sessionId: material?.sessionId,
+                ));
+                if (dc.mounted) Navigator.pop(dc);
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dc), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () async {
-              if (!(formKey.currentState?.validate() ?? false)) return;
-              await state.saveMaterial(MaterialResource(id: material?.id, subjectId: subjectId, title: title.text.trim(), url: url.text.trim(), description: description.text.trim(), kind: kind, createdAt: material?.createdAt ?? DateTime.now()));
-              if (dc.mounted) Navigator.pop(dc);
-            },
-            child: const Text('Salvar'),
-          ),
-        ],
       ),
-    ),
-  );
+    );
+  } finally {
+    title.dispose();
+    url.dispose();
+    description.dispose();
+  }
 }
 
 Future<void> showGradeSimulator(BuildContext context, AppState state) async {
@@ -280,34 +322,38 @@ Future<void> showGradeSimulator(BuildContext context, AppState state) async {
   int subjectId = state.subjects.first.id!;
   final weight = TextEditingController(text: '1');
   double? result = state.requiredNextGrade(subjectId);
-  await showDialog<void>(
-    context: context,
-    builder: (dc) => StatefulBuilder(
-      builder: (context, setLocal) => AlertDialog(
-        title: const Text('Simulador de média'),
-        content: SizedBox(
-          width: 430,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<int>(initialValue: subjectId, decoration: const InputDecoration(labelText: 'Matéria'), items: state.subjects.map((s) => DropdownMenuItem(value: s.id!, child: Text(s.name))).toList(), onChanged: (v) => setLocal(() { subjectId = v ?? subjectId; result = state.requiredNextGrade(subjectId, futureWeight: double.tryParse(weight.text.replaceAll(',', '.')) ?? 1); })),
-            const SizedBox(height: 10),
-            TextField(controller: weight, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Peso da próxima avaliação'), onChanged: (_) => setLocal(() => result = state.requiredNextGrade(subjectId, futureWeight: double.tryParse(weight.text.replaceAll(',', '.')) ?? 1))),
-            const SizedBox(height: 18),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: .08), borderRadius: BorderRadius.circular(16)),
-              child: Column(children: [
-                Text(result == null ? '—' : result! <= 0 ? 'Você já atingiu a meta' : result! > 10 ? 'Acima de 10' : result!.toStringAsFixed(2), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 4),
-                Text('Nota necessária para média ${state.minGrade.toStringAsFixed(1)}', textAlign: TextAlign.center),
-              ]),
-            ),
-          ]),
+  try {
+    await showDialog<void>(
+      context: context,
+      builder: (dc) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Simulador de média'),
+          content: SizedBox(
+            width: 430,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<int>(initialValue: subjectId, decoration: const InputDecoration(labelText: 'Matéria'), items: state.subjects.map((s) => DropdownMenuItem(value: s.id!, child: Text(s.name))).toList(), onChanged: (v) => setLocal(() { subjectId = v ?? subjectId; result = state.requiredNextGrade(subjectId, futureWeight: _positiveDouble(weight.text)); })),
+              const SizedBox(height: 10),
+              TextField(controller: weight, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Peso da próxima avaliação'), onChanged: (_) => setLocal(() => result = state.requiredNextGrade(subjectId, futureWeight: _positiveDouble(weight.text)))),
+              const SizedBox(height: 18),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: .08), borderRadius: BorderRadius.circular(16)),
+                child: Column(children: [
+                  Text(result == null ? '—' : result! <= 0 ? 'Você já atingiu a meta' : result! > 10 ? 'Acima de 10' : result!.toStringAsFixed(2), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 4),
+                  Text('Nota necessária para média ${state.minGrade.toStringAsFixed(1)}', textAlign: TextAlign.center),
+                ]),
+              ),
+            ]),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dc), child: const Text('Fechar'))],
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(dc), child: const Text('Fechar'))],
       ),
-    ),
-  );
+    );
+  } finally {
+    weight.dispose();
+  }
 }
 
 Future<void> showAttendancePlanner(BuildContext context, AppState state) async {
@@ -332,7 +378,13 @@ Future<void> showAttendancePlanner(BuildContext context, AppState state) async {
               ListTile(contentPadding: EdgeInsets.zero, title: Text(selected.plannedClasses <= 0 ? 'Informe as aulas previstas' : remaining >= 9999 ? '—' : '$remaining', style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900)), subtitle: const Text('Faltas que ainda cabem no limite configurado')),
               FilledButton.tonalIcon(
                 onPressed: () async {
-                  await state.saveSubject(selected.copyWith(absences: selected.absences + 1));
+                  // Registrar uma falta manual significa registrar também a
+                  // aula correspondente; só aumentar faltas gera frequência
+                  // impossível (faltas > aulas).
+                  await state.saveSubject(selected.copyWith(
+                    totalClasses: selected.totalClasses + 1,
+                    absences: selected.absences + 1,
+                  ));
                   selected = state.subjectById(selected.id)!;
                   setLocal(() {});
                 },
@@ -385,6 +437,31 @@ Widget _quick(BuildContext sheet, IconData icon, String label, Future<void> Func
         await action();
       },
     );
+
+List<int> _preserveCompletedSteps(AcademicTask? task, List<String> newSteps) {
+  if (task == null || task.completedSteps.isEmpty || task.checklist.isEmpty) return const [];
+  final remaining = <String, int>{};
+  for (final index in task.completedSteps) {
+    if (index < 0 || index >= task.checklist.length) continue;
+    final label = task.checklist[index].trim();
+    if (label.isEmpty) continue;
+    remaining[label] = (remaining[label] ?? 0) + 1;
+  }
+  final completed = <int>[];
+  for (var index = 0; index < newSteps.length; index++) {
+    final label = newSteps[index].trim();
+    final count = remaining[label] ?? 0;
+    if (count <= 0) continue;
+    completed.add(index);
+    count == 1 ? remaining.remove(label) : remaining[label] = count - 1;
+  }
+  return completed;
+}
+
+double _positiveDouble(String value) {
+  final parsed = double.tryParse(value.replaceAll(',', '.')) ?? 1;
+  return parsed > 0 ? parsed : 1;
+}
 
 String taskKindLabel(TaskKind kind) => switch (kind) {
       TaskKind.activity => 'Atividade',
