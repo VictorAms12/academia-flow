@@ -38,12 +38,8 @@ class GoogleIntegrationController extends ChangeNotifier {
     await _store.ensureSchema();
     account = await _store.getAccount();
 
-    // Abrir a tela de integração nunca deve iniciar autenticação nem exibir
-    // seletor de contas. O perfil salvo é suficiente para restaurar a UI; a
-    // credencial Google só é revalidada quando o usuário executa uma ação
-    // online, como atualizar ou sincronizar o Classroom.
+    // Restaurar a UI nunca inicia autenticação nem seletor de conta.
     authenticated = account != null;
-
     if (account != null) {
       courseLinks = await _store.getCourseLinks(account!.id);
       taskLinks = await _store.getTaskLinks(account!.id);
@@ -186,7 +182,9 @@ class GoogleIntegrationController extends ChangeNotifier {
     if (profile == null) return;
     await _run(() async {
       await _store.deleteCourseLink(profile.id, course.id);
+      await _store.deleteTaskLinksForCourse(profile.id, course.id);
       courseLinks = await _store.getCourseLinks(profile.id);
+      taskLinks = await _store.getTaskLinks(profile.id);
     });
   }
 
@@ -204,104 +202,121 @@ class GoogleIntegrationController extends ChangeNotifier {
         for (final link in await _store.getTaskLinks(profile.id))
           '${link.courseId}:${link.courseWorkId}': link,
       };
+      final localTasks = <int, AcademicTask>{
+        for (final task in state.tasks)
+          if (task.id != null) task.id!: task,
+      };
       var created = 0;
       var updated = 0;
       var completed = 0;
       var skipped = 0;
+      var changedLocally = false;
 
-      for (final courseLink in courseLinks) {
-        final work = await _classroom.listCourseWork(courseLink.courseId, token);
-        final submissions = await _classroom.listMySubmissions(courseLink.courseId, token);
-        final submissionByWork = <String, ClassroomSubmission>{
-          for (final submission in submissions) submission.courseWorkId: submission,
-        };
+      try {
+        for (final courseLink in courseLinks) {
+          // As duas requisições são independentes; iniciar ambas antes do
+          // primeiro await reduz sensivelmente o tempo de cada turma.
+          final workFuture = _classroom.listCourseWork(courseLink.courseId, token);
+          final submissionsFuture = _classroom.listMySubmissions(courseLink.courseId, token);
+          final work = await workFuture;
+          final submissions = await submissionsFuture;
+          final submissionByWork = <String, ClassroomSubmission>{
+            for (final submission in submissions) submission.courseWorkId: submission,
+          };
 
-        for (final item in work) {
-          final key = '${courseLink.courseId}:${item.id}';
-          final previousLink = existingLinks[key];
-          final submission = submissionByWork[item.id];
-          final dueAt = item.dueAt;
+          for (final item in work) {
+            final key = '${courseLink.courseId}:${item.id}';
+            final previousLink = existingLinks[key];
+            final submission = submissionByWork[item.id];
+            final dueAt = item.dueAt;
 
-          if (previousLink == null && dueAt == null) {
-            skipped++;
-            continue;
-          }
-
-          AcademicTask? task;
-          if (previousLink != null) {
-            for (final candidate in state.tasks) {
-              if (candidate.id == previousLink.taskId) {
-                task = candidate;
-                break;
-              }
-            }
-          }
-
-          if (task == null) {
-            if (dueAt == null) {
+            if (previousLink == null && dueAt == null) {
               skipped++;
               continue;
             }
-            task = await state.saveTask(
-              AcademicTask(
-                title: item.title,
-                subjectId: courseLink.subjectId,
-                dueDate: dueAt,
-                priority: Priority.medium,
-                status: submission?.submitted == true ? TaskStatus.done : TaskStatus.todo,
-                kind: _taskKind(item.workType),
-                reminderEnabled: true,
-                description: _classroomDescription(item),
-              ),
-            );
-            created++;
-          } else {
-            final sourceChanged = item.title != task.title ||
-                (dueAt != null && dueAt != task.dueDate) ||
-                task.subjectId != courseLink.subjectId;
-            final shouldComplete = submission?.submitted == true && task.status != TaskStatus.done;
-            if (sourceChanged || shouldComplete) {
+
+            AcademicTask? task = previousLink == null ? null : localTasks[previousLink.taskId];
+
+            if (task == null) {
+              if (dueAt == null) {
+                skipped++;
+                continue;
+              }
               task = await state.saveTask(
-                task.copyWith(
+                AcademicTask(
                   title: item.title,
                   subjectId: courseLink.subjectId,
-                  dueDate: dueAt ?? task.dueDate,
+                  dueDate: dueAt,
+                  priority: Priority.medium,
+                  status: submission?.submitted == true ? TaskStatus.done : TaskStatus.todo,
                   kind: _taskKind(item.workType),
-                  status: shouldComplete ? TaskStatus.done : task.status,
+                  reminderEnabled: true,
                   description: _classroomDescription(item),
                 ),
+                reload: false,
+                scheduleNotification: false,
+                notify: false,
               );
-              if (sourceChanged) updated++;
-              if (shouldComplete) completed++;
+              if (task.id != null) localTasks[task.id!] = task;
+              changedLocally = true;
+              created++;
+            } else {
+              final sourceChanged = item.title != task.title ||
+                  (dueAt != null && dueAt != task.dueDate) ||
+                  task.subjectId != courseLink.subjectId ||
+                  task.kind != _taskKind(item.workType) ||
+                  task.description != _classroomDescription(item);
+              final shouldComplete = submission?.submitted == true && task.status != TaskStatus.done;
+              if (sourceChanged || shouldComplete) {
+                task = await state.saveTask(
+                  task.copyWith(
+                    title: item.title,
+                    subjectId: courseLink.subjectId,
+                    dueDate: dueAt ?? task.dueDate,
+                    kind: _taskKind(item.workType),
+                    status: shouldComplete ? TaskStatus.done : task.status,
+                    description: _classroomDescription(item),
+                  ),
+                  reload: false,
+                  scheduleNotification: false,
+                  notify: false,
+                );
+                if (task.id != null) localTasks[task.id!] = task;
+                changedLocally = true;
+                if (sourceChanged) updated++;
+                if (shouldComplete) completed++;
+              }
+            }
+
+            if (task.id != null) {
+              final taskLink = ClassroomTaskLink(
+                googleUserId: profile.id,
+                courseId: courseLink.courseId,
+                courseWorkId: item.id,
+                taskId: task.id!,
+                submissionState: submission?.state ?? '',
+                alternateLink: item.alternateLink,
+                updatedAt: DateTime.now(),
+              );
+              await _store.saveTaskLink(taskLink);
+              existingLinks[key] = taskLink;
             }
           }
 
-          if (task.id != null) {
-            final taskLink = ClassroomTaskLink(
-              googleUserId: profile.id,
+          await _store.saveCourseLink(
+            ClassroomCourseLink(
+              googleUserId: courseLink.googleUserId,
               courseId: courseLink.courseId,
-              courseWorkId: item.id,
-              taskId: task.id!,
-              submissionState: submission?.state ?? '',
-              alternateLink: item.alternateLink,
-              updatedAt: DateTime.now(),
-            );
-            await _store.saveTaskLink(taskLink);
-            existingLinks[key] = taskLink;
-          }
+              subjectId: courseLink.subjectId,
+              courseName: courseLink.courseName,
+              courseState: courseLink.courseState,
+              alternateLink: courseLink.alternateLink,
+              lastSyncedAt: DateTime.now(),
+            ),
+          );
         }
-
-        await _store.saveCourseLink(
-          ClassroomCourseLink(
-            googleUserId: courseLink.googleUserId,
-            courseId: courseLink.courseId,
-            subjectId: courseLink.subjectId,
-            courseName: courseLink.courseName,
-            courseState: courseLink.courseState,
-            alternateLink: courseLink.alternateLink,
-            lastSyncedAt: DateTime.now(),
-          ),
-        );
+      } finally {
+        if (changedLocally) await state.refreshTasksAfterBatch();
       }
 
       final syncTime = DateTime.now();
@@ -324,7 +339,7 @@ class GoogleIntegrationController extends ChangeNotifier {
   Future<void> openClassroom(String url) async {
     if (url.trim().isEmpty) return;
     final uri = Uri.tryParse(url);
-    if (uri == null) return;
+    if (uri == null || !(uri.scheme == 'https' || uri.scheme == 'http')) return;
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       throw StateError('Não foi possível abrir o Google Classroom.');
     }
