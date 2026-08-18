@@ -3,10 +3,14 @@ name: Build Windows Desktop
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches: [main]
 
 permissions:
   contents: read
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-windows:
@@ -52,12 +56,12 @@ jobs:
 
       - name: Package portable build
         shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath academia-flow-windows-v2.5-google-integration.zip -Force
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath academia-flow-windows-portable.zip -Force
 
       - name: Upload Windows portable app
         uses: actions/upload-artifact@v4
         with:
-          name: academia-flow-windows-v2.5-google-integration
-          path: academia-flow-windows-v2.5-google-integration.zip
+          name: academia-flow-windows-portable
+          path: academia-flow-windows-portable.zip
           if-no-files-found: error
           retention-days: 30
