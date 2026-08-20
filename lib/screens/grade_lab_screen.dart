@@ -53,8 +53,11 @@ class _GradeLabScreenState extends State<GradeLabScreen> {
                         ),
                         DropdownButton<double>(
                           value: futureWeight,
-                          items: const [0.5, 1, 1.5, 2, 3, 4, 5]
-                              .map((value) => DropdownMenuItem(value: value, child: Text(value.toStringAsFixed(value % 1 == 0 ? 0 : 1))))
+                          items: const <double>[0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
+                              .map((value) => DropdownMenuItem<double>(
+                                    value: value,
+                                    child: Text(value.toStringAsFixed(value % 1 == 0 ? 0 : 1)),
+                                  ))
                               .toList(),
                           onChanged: (value) => setState(() => futureWeight = value ?? futureWeight),
                         ),
@@ -63,22 +66,43 @@ class _GradeLabScreenState extends State<GradeLabScreen> {
                   ),
                   const SizedBox(height: 14),
                   if (state.subjects.isEmpty)
-                    const EmptyState(icon: Icons.grade_outlined, title: 'Sem matérias', message: 'Cadastre matérias para começar a projetar suas médias.')
+                    const EmptyState(
+                      icon: Icons.grade_outlined,
+                      title: 'Sem matérias',
+                      message: 'Cadastre matérias para começar a projetar suas médias.',
+                    )
                   else
                     LayoutBuilder(
-                      builder: (context, c) {
-                        final columns = c.maxWidth >= 760 ? 2 : 1;
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 760) {
+                          return Column(
+                            children: [
+                              for (var i = 0; i < state.subjects.length; i++) ...[
+                                _SubjectGradeCard(
+                                  state: state,
+                                  subject: state.subjects[i],
+                                  futureWeight: futureWeight,
+                                ),
+                                if (i < state.subjects.length - 1) const SizedBox(height: 10),
+                              ],
+                            ],
+                          );
+                        }
                         return GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: state.subjects.length,
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: columns,
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 10,
-                            childAspectRatio: columns == 1 ? 1.75 : 1.2,
+                            childAspectRatio: 1.18,
                           ),
-                          itemBuilder: (_, index) => _SubjectGradeCard(state: state, subject: state.subjects[index], futureWeight: futureWeight),
+                          itemBuilder: (_, index) => _SubjectGradeCard(
+                            state: state,
+                            subject: state.subjects[index],
+                            futureWeight: futureWeight,
+                          ),
                         );
                       },
                     ),
@@ -89,8 +113,16 @@ class _GradeLabScreenState extends State<GradeLabScreen> {
                         children: [
                           const Icon(Icons.calculate_outlined, color: AppColors.gold),
                           const SizedBox(width: 11),
-                          const Expanded(child: Text('Quer testar outro peso ou uma matéria específica?', style: TextStyle(fontWeight: FontWeight.w800))),
-                          TextButton(onPressed: () => showGradeSimulator(context, state), child: const Text('Abrir simulador')),
+                          const Expanded(
+                            child: Text(
+                              'Quer testar outro peso ou uma matéria específica?',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => showGradeSimulator(context, state),
+                            child: const Text('Abrir simulador'),
+                          ),
                         ],
                       ),
                     ),
@@ -131,7 +163,14 @@ class _SubjectGradeCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(subject.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+              Expanded(
+                child: Text(
+                  subject.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                ),
+              ),
               if (atRisk) const Icon(Icons.warning_amber_rounded, color: AppColors.danger),
             ],
           ),
@@ -139,9 +178,15 @@ class _SubjectGradeCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(average?.toStringAsFixed(2) ?? '—', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: atRisk ? AppColors.danger : null)),
+              Text(
+                average?.toStringAsFixed(2) ?? '—',
+                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: atRisk ? AppColors.danger : null),
+              ),
               const SizedBox(width: 6),
-              Padding(padding: const EdgeInsets.only(bottom: 5), child: Text('média atual', style: Theme.of(context).textTheme.bodySmall)),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Text('média atual', style: Theme.of(context).textTheme.bodySmall),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -155,30 +200,53 @@ class _SubjectGradeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('PRÓXIMA AVALIAÇÃO', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.gold)),
+                const Text(
+                  'PRÓXIMA AVALIAÇÃO',
+                  style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.gold),
+                ),
                 const SizedBox(height: 4),
                 Text(_requiredText(required), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-                Text('para alcançar média ${state.minGrade.toStringAsFixed(1)} com peso ${futureWeight.toStringAsFixed(futureWeight % 1 == 0 ? 0 : 1)}', style: Theme.of(context).textTheme.labelSmall),
+                Text(
+                  'para alcançar média ${state.minGrade.toStringAsFixed(1)} com peso ${futureWeight.toStringAsFixed(futureWeight % 1 == 0 ? 0 : 1)}',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
               ],
             ),
           ),
           const SizedBox(height: 9),
-          Text('${grades.length} nota${grades.length == 1 ? '' : 's'} registrada${grades.length == 1 ? '' : 's'}', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            '${grades.length} nota${grades.length == 1 ? '' : 's'} registrada${grades.length == 1 ? '' : 's'}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           if (grades.isNotEmpty) ...[
             const SizedBox(height: 6),
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: grades.take(4).map((grade) => Chip(label: Text('${grade.title}: ${grade.value.toStringAsFixed(1)}'), visualDensity: VisualDensity.compact)).toList(),
+              children: grades
+                  .take(4)
+                  .map((grade) => Chip(
+                        label: Text('${grade.title}: ${grade.value.toStringAsFixed(1)}'),
+                        visualDensity: VisualDensity.compact,
+                      ))
+                  .toList(),
             ),
           ],
           if (nextExam != null) ...[
-            const Spacer(),
-            const Divider(),
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
             Row(children: [
               const Icon(Icons.quiz_outlined, size: 17, color: AppColors.gold),
               const SizedBox(width: 6),
-              Expanded(child: Text('${nextExam.title} • ${_date(nextExam.dueDate)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
+              Expanded(
+                child: Text(
+                  '${nextExam.title} • ${_date(nextExam.dueDate)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+                ),
+              ),
             ]),
           ],
         ],
