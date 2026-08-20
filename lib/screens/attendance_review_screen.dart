@@ -12,8 +12,7 @@ class AttendanceReviewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
-    final history = [...state.classSessions]
-      ..sort((a, b) => b.startsAt.compareTo(a.startsAt));
+    final history = [...state.classSessions]..sort((a, b) => b.startsAt.compareTo(a.startsAt));
     final resolved = history.where((session) => session.status != AttendanceStatus.pending).take(30).toList();
 
     return Scaffold(
@@ -33,22 +32,38 @@ class AttendanceReviewScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 15),
                   if (state.subjects.isEmpty)
-                    const EmptyState(icon: Icons.how_to_reg_rounded, title: 'Sem matérias', message: 'Cadastre matérias para acompanhar a frequência.')
+                    const EmptyState(
+                      icon: Icons.how_to_reg_rounded,
+                      title: 'Sem matérias',
+                      message: 'Cadastre matérias para acompanhar a frequência.',
+                    )
                   else ...[
                     LayoutBuilder(
-                      builder: (context, c) {
-                        final columns = c.maxWidth >= 760 ? 2 : 1;
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 760) {
+                          return Column(
+                            children: [
+                              for (var i = 0; i < state.subjects.length; i++) ...[
+                                _AttendanceProjectionCard(state: state, subject: state.subjects[i]),
+                                if (i < state.subjects.length - 1) const SizedBox(height: 10),
+                              ],
+                            ],
+                          );
+                        }
                         return GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: state.subjects.length,
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: columns,
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 10,
-                            childAspectRatio: columns == 1 ? 2.0 : 1.48,
+                            childAspectRatio: 1.43,
                           ),
-                          itemBuilder: (_, index) => _AttendanceProjectionCard(state: state, subject: state.subjects[index]),
+                          itemBuilder: (_, index) => _AttendanceProjectionCard(
+                            state: state,
+                            subject: state.subjects[index],
+                          ),
                         );
                       },
                     ),
@@ -56,7 +71,11 @@ class AttendanceReviewScreen extends StatelessWidget {
                     const SectionTitle('Histórico editável'),
                     const SizedBox(height: 10),
                     if (resolved.isEmpty)
-                      const EmptyState(icon: Icons.history_rounded, title: 'Sem registros confirmados', message: 'As presenças e faltas confirmadas aparecerão aqui.')
+                      const EmptyState(
+                        icon: Icons.history_rounded,
+                        title: 'Sem registros confirmados',
+                        message: 'As presenças e faltas confirmadas aparecerão aqui.',
+                      )
                     else
                       SoftCard(
                         child: Column(
@@ -102,7 +121,14 @@ class _AttendanceProjectionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(subject.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+              Expanded(
+                child: Text(
+                  subject.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                ),
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: riskColor.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)),
@@ -112,7 +138,10 @@ class _AttendanceProjectionCard extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           Text('${subject.attendance.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 28)),
-          Text('${subject.absences} falta${subject.absences == 1 ? '' : 's'} • ${subject.totalClasses} aulas contabilizadas', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            '${subject.absences} falta${subject.absences == 1 ? '' : 's'} • ${subject.totalClasses} aulas contabilizadas',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 8),
           LinearProgressIndicator(
             value: (subject.attendance / 100).clamp(0, 1),
@@ -120,7 +149,7 @@ class _AttendanceProjectionCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             color: subject.attendance < target ? AppColors.danger : AppColors.success,
           ),
-          const Spacer(),
+          const SizedBox(height: 12),
           Text(
             remaining >= 9999
                 ? 'Defina o total planejado para calcular o limite de faltas.'
@@ -161,15 +190,30 @@ class _AttendanceHistoryTile extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
         backgroundColor: color.withValues(alpha: .10),
-        child: Icon(session.status == AttendanceStatus.present ? Icons.check_rounded : session.status == AttendanceStatus.absent ? Icons.close_rounded : Icons.event_busy_rounded, color: color),
+        child: Icon(
+          session.status == AttendanceStatus.present
+              ? Icons.check_rounded
+              : session.status == AttendanceStatus.absent
+                  ? Icons.close_rounded
+                  : Icons.event_busy_rounded,
+          color: color,
+        ),
       ),
       title: Text(state.subjectName(session.subjectId), style: const TextStyle(fontWeight: FontWeight.w800)),
-      subtitle: Text('${_date(session.date)} • ${session.start}–${session.end} • ${session.classCount} aula${session.classCount == 1 ? '' : 's'}${session.note.isEmpty ? '' : '\n${session.note}'}', maxLines: 3, overflow: TextOverflow.ellipsis),
+      subtitle: Text(
+        '${_date(session.date)} • ${session.start}–${session.end} • ${session.classCount} aula${session.classCount == 1 ? '' : 's'}${session.note.isEmpty ? '' : '\n${session.note}'}',
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: color)),
-          IconButton(tooltip: 'Revisar registro', onPressed: () => showAttendanceEditor(context, state, session), icon: const Icon(Icons.edit_outlined)),
+          IconButton(
+            tooltip: 'Revisar registro',
+            onPressed: () => showAttendanceEditor(context, state, session),
+            icon: const Icon(Icons.edit_outlined),
+          ),
         ],
       ),
     );
