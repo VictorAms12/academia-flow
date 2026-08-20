@@ -135,7 +135,7 @@ class _DesktopNav extends StatelessWidget {
             SizedBox(width: 11),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Academia Flow', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              Text('Academic OS • 2.4 Routine', style: TextStyle(fontSize: 10)),
+              Text('Academic OS • 2.6 Rotina Inteligente', style: TextStyle(fontSize: 10)),
             ])),
           ]),
           const SizedBox(height: 28),
