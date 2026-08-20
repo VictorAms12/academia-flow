@@ -64,7 +64,7 @@ class V26Controller extends ChangeNotifier {
       title: title.trim(),
       startsAt: startsAt,
       subjectId: subjectId,
-      durationMinutes: durationMinutes.clamp(15, 720),
+      durationMinutes: durationMinutes.clamp(15, 720).toInt(),
       completed: existing?.completed ?? false,
       note: note.trim(),
     );
@@ -102,12 +102,17 @@ class V26Controller extends ChangeNotifier {
   Future<AcademicTask> duplicateTask(AcademicTask task) async {
     final state = _requireState();
     return state.saveTask(
-      task.copyWith(
-        id: null,
+      AcademicTask(
         title: '${task.title} (cópia)',
+        subjectId: task.subjectId,
+        dueDate: task.dueDate,
+        priority: task.priority,
         status: TaskStatus.todo,
+        kind: task.kind,
+        reminderEnabled: task.reminderEnabled,
+        description: task.description,
+        checklist: [...task.checklist],
         completedSteps: const [],
-        clearSession: true,
       ),
     );
   }
@@ -185,7 +190,7 @@ class V26Controller extends ChangeNotifier {
     final classPoints = sessions.fold<int>(0, (sum, session) => sum + session.classCount * 9);
     final taskPoints = tasks.fold<int>(0, (sum, task) => sum + switch (task.priority) { Priority.high => 22, Priority.medium => 14, Priority.low => 8 });
     final studyPoints = study.fold<int>(0, (sum, block) => sum + (block.durationMinutes / 15).ceil());
-    return (classPoints + taskPoints + studyPoints).clamp(0, 100);
+    return (classPoints + taskPoints + studyPoints).clamp(0, 100).toInt();
   }
 
   String dailyLoadLabel(DateTime date) {
