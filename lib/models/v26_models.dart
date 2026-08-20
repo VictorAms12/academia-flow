@@ -41,7 +41,7 @@ class StudyBlock {
         title: title ?? this.title,
         startsAt: startsAt ?? this.startsAt,
         subjectId: clearSubject ? null : subjectId ?? this.subjectId,
-        durationMinutes: (durationMinutes ?? this.durationMinutes).clamp(15, 720),
+        durationMinutes: (durationMinutes ?? this.durationMinutes).clamp(15, 720).toInt(),
         completed: completed ?? this.completed,
         note: note ?? this.note,
       );
@@ -64,7 +64,7 @@ class StudyBlock {
       title: '${json['title'] ?? ''}'.trim(),
       startsAt: parsed,
       subjectId: (json['subjectId'] as num?)?.toInt(),
-      durationMinutes: ((json['durationMinutes'] as num?)?.toInt() ?? 60).clamp(15, 720),
+      durationMinutes: ((json['durationMinutes'] as num?)?.toInt() ?? 60).clamp(15, 720).toInt(),
       completed: json['completed'] == true,
       note: '${json['note'] ?? ''}',
     );
@@ -128,7 +128,7 @@ int taskUrgencyScore(AcademicTask task, {DateTime? now}) {
   };
   final status = task.status == TaskStatus.doing ? 8 : 0;
   final dueScore = days < 0
-      ? 100 + (-days * 4).clamp(0, 60)
+      ? 100 + (-days * 4).clamp(0, 60).toInt()
       : days == 0
           ? 90
           : days == 1
@@ -142,7 +142,7 @@ int taskUrgencyScore(AcademicTask task, {DateTime? now}) {
 }
 
 String compactDuration(int minutes) {
-  final safe = minutes.clamp(0, 100000);
+  final safe = minutes.clamp(0, 100000).toInt();
   final hours = safe ~/ 60;
   final rest = safe % 60;
   if (hours == 0) return '${rest}min';
