@@ -242,112 +242,169 @@ Future<void> showScheduleEditor(
   TimeOfDay start = _parseTime(entry?.start ?? '19:00');
   TimeOfDay end = _parseTime(entry?.end ?? '20:40');
   final room = TextEditingController(text: entry?.room ?? state.subjectById(subjectId)?.room ?? '');
+  var saving = false;
+  String? saveError;
 
   try {
-    await showDialog<void>(
+    final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: Text(entry == null ? 'Novo horário' : 'Editar horário'),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<int>(
-                    initialValue: subjectId,
-                    decoration: const InputDecoration(labelText: 'Matéria'),
-                    items: state.subjects.map((s) => DropdownMenuItem(value: s.id!, child: Text(s.name))).toList(),
-                    onChanged: (v) => setLocal(() {
-                      subjectId = v ?? subjectId;
-                      if (room.text.trim().isEmpty) room.text = state.subjectById(subjectId)?.room ?? '';
-                    }),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<int>(
-                    initialValue: day,
-                    decoration: const InputDecoration(labelText: 'Dia da semana'),
-                    items: const [
-                      DropdownMenuItem(value: 1, child: Text('Segunda-feira')),
-                      DropdownMenuItem(value: 2, child: Text('Terça-feira')),
-                      DropdownMenuItem(value: 3, child: Text('Quarta-feira')),
-                      DropdownMenuItem(value: 4, child: Text('Quinta-feira')),
-                      DropdownMenuItem(value: 5, child: Text('Sexta-feira')),
-                      DropdownMenuItem(value: 6, child: Text('Sábado')),
-                      DropdownMenuItem(value: 7, child: Text('Domingo')),
+        builder: (context, setLocal) => PopScope(
+          canPop: !saving,
+          child: AlertDialog(
+            title: Text(entry == null ? 'Novo horário' : 'Editar horário'),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<int>(
+                      initialValue: subjectId,
+                      decoration: const InputDecoration(labelText: 'Matéria'),
+                      items: state.subjects.map((s) => DropdownMenuItem(value: s.id!, child: Text(s.name))).toList(),
+                      onChanged: saving
+                          ? null
+                          : (v) => setLocal(() {
+                                subjectId = v ?? subjectId;
+                                if (room.text.trim().isEmpty) room.text = state.subjectById(subjectId)?.room ?? '';
+                              }),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: day,
+                      decoration: const InputDecoration(labelText: 'Dia da semana'),
+                      items: const [
+                        DropdownMenuItem(value: 1, child: Text('Segunda-feira')),
+                        DropdownMenuItem(value: 2, child: Text('Terça-feira')),
+                        DropdownMenuItem(value: 3, child: Text('Quarta-feira')),
+                        DropdownMenuItem(value: 4, child: Text('Quinta-feira')),
+                        DropdownMenuItem(value: 5, child: Text('Sexta-feira')),
+                        DropdownMenuItem(value: 6, child: Text('Sábado')),
+                        DropdownMenuItem(value: 7, child: Text('Domingo')),
+                      ],
+                      onChanged: saving ? null : (v) => setLocal(() => day = v ?? day),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _TimeField(
+                            label: 'Início',
+                            time: start,
+                            enabled: !saving,
+                            onTap: () async {
+                              final selected = await showTimePicker(context: context, initialTime: start);
+                              if (selected != null) setLocal(() => start = selected);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _TimeField(
+                            label: 'Fim',
+                            time: end,
+                            enabled: !saving,
+                            onTap: () async {
+                              final selected = await showTimePicker(context: context, initialTime: end);
+                              if (selected != null) setLocal(() => end = selected);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(controller: room, enabled: !saving, decoration: const InputDecoration(labelText: 'Sala / local')),
+                    if (saving) ...[
+                      const SizedBox(height: 18),
+                      const LinearProgressIndicator(minHeight: 4),
+                      const SizedBox(height: 9),
+                      Text(
+                        entry == null
+                            ? 'Salvando horário e preparando as próximas aulas…'
+                            : 'Salvando alteração e atualizando as próximas aulas…',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
-                    onChanged: (v) => setLocal(() => day = v ?? day),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _TimeField(
-                          label: 'Início',
-                          time: start,
-                          onTap: () async {
-                            final selected = await showTimePicker(context: context, initialTime: start);
-                            if (selected != null) setLocal(() => start = selected);
-                          },
+                    if (saveError != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(11),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: .55),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          saveError!,
+                          style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer, fontSize: 12),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _TimeField(
-                          label: 'Fim',
-                          time: end,
-                          onTap: () async {
-                            final selected = await showTimePicker(context: context, initialTime: end);
-                            if (selected != null) setLocal(() => end = selected);
-                          },
-                        ),
-                      ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(controller: room, decoration: const InputDecoration(labelText: 'Sala / local')),
-                ],
+                  ],
+                ),
               ),
             ),
+            actions: [
+              TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+              FilledButton.icon(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        if (_minutes(end) <= _minutes(start)) {
+                          setLocal(() => saveError = 'O horário final deve ser posterior ao horário inicial.');
+                          return;
+                        }
+                        setLocal(() {
+                          saving = true;
+                          saveError = null;
+                        });
+                        try {
+                          await state.saveSchedule(
+                            ScheduleEntry(
+                              id: entry?.id,
+                              subjectId: subjectId,
+                              day: day,
+                              start: _formatTime(start),
+                              end: _formatTime(end),
+                              room: room.text.trim(),
+                              classCount: entry?.classCount ?? 1,
+                              reminderMinutes: entry?.reminderMinutes ?? 10,
+                            ),
+                          );
+                          if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+                        } catch (error) {
+                          if (!dialogContext.mounted) return;
+                          setLocal(() {
+                            saving = false;
+                            saveError = 'Não foi possível salvar o horário. ${_friendlyError(error)}';
+                          });
+                        }
+                      },
+                icon: saving
+                    ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.save_outlined),
+                label: Text(saving ? 'Salvando…' : 'Salvar'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
-            FilledButton(
-              onPressed: () async {
-                if (_minutes(end) <= _minutes(start)) {
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    const SnackBar(content: Text('O horário final deve ser posterior ao horário inicial.')),
-                  );
-                  return;
-                }
-                try {
-                  await state.saveSchedule(
-                    ScheduleEntry(
-                      id: entry?.id,
-                      subjectId: subjectId,
-                      day: day,
-                      start: _formatTime(start),
-                      end: _formatTime(end),
-                      room: room.text.trim(),
-                      classCount: entry?.classCount ?? 1,
-                      reminderMinutes: entry?.reminderMinutes ?? 10,
-                    ),
-                  );
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                } catch (error) {
-                  if (!dialogContext.mounted) return;
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    SnackBar(content: Text('Não foi possível salvar o horário: $error')),
-                  );
-                }
-              },
-              child: const Text('Salvar'),
-            ),
-          ],
         ),
       ),
     );
+    if (saved == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text(
+            entry == null
+                ? 'Horário salvo. As próximas aulas foram preparadas.'
+                : 'Horário atualizado. As próximas aulas foram recalculadas.',
+          ),
+        ),
+      );
+    }
   } finally {
     room.dispose();
   }
@@ -393,19 +450,25 @@ String _formatTime(TimeOfDay time) =>
 String _formatDate(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
+String _friendlyError(Object error) {
+  final text = '$error'.replaceFirst('ArgumentError: ', '').replaceFirst('StateError: ', '').trim();
+  return text.isEmpty ? 'Tente novamente.' : text;
+}
+
 class _TimeField extends StatelessWidget {
-  const _TimeField({required this.label, required this.time, required this.onTap});
+  const _TimeField({required this.label, required this.time, required this.onTap, this.enabled = true});
   final String label;
   final TimeOfDay time;
   final VoidCallback onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(14),
       child: InputDecorator(
-        decoration: InputDecoration(labelText: label),
+        decoration: InputDecoration(labelText: label, enabled: enabled),
         child: Text(_formatTime(time)),
       ),
     );
