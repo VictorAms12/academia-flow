@@ -19,8 +19,9 @@ class _GradeLabScreenState extends State<GradeLabScreen> {
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Notas 2.0')),
+      appBar: AppBar(title: const Text('Notas')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
         children: [
@@ -46,18 +47,23 @@ class _GradeLabScreenState extends State<GradeLabScreen> {
                         const Icon(Icons.tune_rounded, color: AppColors.gold),
                         const SizedBox(width: 10),
                         const Expanded(
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text('Peso da próxima avaliação', style: TextStyle(fontWeight: FontWeight.w900)),
-                            Text('A projeção abaixo usa esse peso para todas as matérias.', style: TextStyle(fontSize: 11)),
-                          ]),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Peso da próxima avaliação', style: TextStyle(fontWeight: FontWeight.w900)),
+                              Text('A projeção abaixo usa esse peso para todas as matérias.', style: TextStyle(fontSize: 11)),
+                            ],
+                          ),
                         ),
                         DropdownButton<double>(
                           value: futureWeight,
                           items: const <double>[0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
-                              .map((value) => DropdownMenuItem<double>(
-                                    value: value,
-                                    child: Text(value.toStringAsFixed(value % 1 == 0 ? 0 : 1)),
-                                  ))
+                              .map(
+                                (value) => DropdownMenuItem<double>(
+                                  value: value,
+                                  child: Text(value.toStringAsFixed(value % 1 == 0 ? 0 : 1)),
+                                ),
+                              )
                               .toList(),
                           onChanged: (value) => setState(() => futureWeight = value ?? futureWeight),
                         ),
@@ -88,21 +94,22 @@ class _GradeLabScreenState extends State<GradeLabScreen> {
                             ],
                           );
                         }
-                        return GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: state.subjects.length,
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            childAspectRatio: 1.18,
-                          ),
-                          itemBuilder: (_, index) => _SubjectGradeCard(
-                            state: state,
-                            subject: state.subjects[index],
-                            futureWeight: futureWeight,
-                          ),
+
+                        final width = (constraints.maxWidth - 10) / 2;
+                        return Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            for (final subject in state.subjects)
+                              SizedBox(
+                                width: width,
+                                child: _SubjectGradeCard(
+                                  state: state,
+                                  subject: subject,
+                                  futureWeight: futureWeight,
+                                ),
+                              ),
+                          ],
                         );
                       },
                     ),
@@ -138,7 +145,12 @@ class _GradeLabScreenState extends State<GradeLabScreen> {
 }
 
 class _SubjectGradeCard extends StatelessWidget {
-  const _SubjectGradeCard({required this.state, required this.subject, required this.futureWeight});
+  const _SubjectGradeCard({
+    required this.state,
+    required this.subject,
+    required this.futureWeight,
+  });
+
   final AppState state;
   final Subject subject;
   final double futureWeight;
@@ -147,11 +159,18 @@ class _SubjectGradeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final grades = subject.id == null ? <Grade>[] : state.gradesForSubject(subject.id!);
     final average = subject.id == null ? null : state.averageForSubject(subject.id!);
-    final required = subject.id == null ? null : state.requiredNextGrade(subject.id!, futureWeight: futureWeight);
+    final required = subject.id == null
+        ? null
+        : state.requiredNextGrade(subject.id!, futureWeight: futureWeight);
     final examTasks = subject.id == null
         ? <AcademicTask>[]
         : state.tasks
-            .where((task) => task.subjectId == subject.id && task.kind == TaskKind.exam && task.status != TaskStatus.done)
+            .where(
+              (task) =>
+                  task.subjectId == subject.id &&
+                  task.kind == TaskKind.exam &&
+                  task.status != TaskStatus.done,
+            )
             .toList()
       ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
     final nextExam = examTasks.isEmpty ? null : examTasks.first;
@@ -180,7 +199,11 @@ class _SubjectGradeCard extends StatelessWidget {
             children: [
               Text(
                 average?.toStringAsFixed(2) ?? '—',
-                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: atRisk ? AppColors.danger : null),
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                  color: atRisk ? AppColors.danger : null,
+                ),
               ),
               const SizedBox(width: 6),
               Padding(
@@ -205,7 +228,10 @@ class _SubjectGradeCard extends StatelessWidget {
                   style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppColors.gold),
                 ),
                 const SizedBox(height: 4),
-                Text(_requiredText(required), style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                Text(
+                  _requiredText(required),
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                ),
                 Text(
                   'para alcançar média ${state.minGrade.toStringAsFixed(1)} com peso ${futureWeight.toStringAsFixed(futureWeight % 1 == 0 ? 0 : 1)}',
                   style: Theme.of(context).textTheme.labelSmall,
@@ -225,29 +251,32 @@ class _SubjectGradeCard extends StatelessWidget {
               runSpacing: 6,
               children: grades
                   .take(4)
-                  .map((grade) => Chip(
-                        label: Text('${grade.title}: ${grade.value.toStringAsFixed(1)}'),
-                        visualDensity: VisualDensity.compact,
-                      ))
+                  .map(
+                    (grade) => Chip(
+                      label: Text('${grade.title}: ${grade.value.toStringAsFixed(1)}'),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  )
                   .toList(),
             ),
           ],
           if (nextExam != null) ...[
             const SizedBox(height: 10),
-            const Divider(height: 1),
-            const SizedBox(height: 8),
-            Row(children: [
-              const Icon(Icons.quiz_outlined, size: 17, color: AppColors.gold),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  '${nextExam.title} • ${_date(nextExam.dueDate)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+            const Divider(),
+            Row(
+              children: [
+                const Icon(Icons.quiz_outlined, size: 17, color: AppColors.gold),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${nextExam.title} • ${_date(nextExam.dueDate)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
           ],
         ],
       ),
@@ -262,4 +291,5 @@ String _requiredText(double? value) {
   return 'Precisa de ${value.toStringAsFixed(2)}';
 }
 
-String _date(DateTime value) => '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}';
+String _date(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}';
