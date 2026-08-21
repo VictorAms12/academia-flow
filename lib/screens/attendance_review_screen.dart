@@ -16,7 +16,7 @@ class AttendanceReviewScreen extends StatelessWidget {
     final resolved = history.where((session) => session.status != AttendanceStatus.pending).take(30).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Presença 2.0')),
+      appBar: AppBar(title: const Text('Presença')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(18, 8, 18, 30),
         children: [
@@ -28,7 +28,7 @@ class AttendanceReviewScreen extends StatelessWidget {
                 children: [
                   const PageHeader(
                     title: 'Frequência e revisão',
-                    subtitle: 'Veja o impacto das próximas faltas e corrija registros sem perder o contexto da aula.',
+                    subtitle: 'Compare o impacto de estar presente ou faltar na próxima aula e revise seus registros.',
                   ),
                   const SizedBox(height: 15),
                   if (state.subjects.isEmpty)
@@ -50,20 +50,18 @@ class AttendanceReviewScreen extends StatelessWidget {
                             ],
                           );
                         }
-                        return GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: state.subjects.length,
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            childAspectRatio: 1.43,
-                          ),
-                          itemBuilder: (_, index) => _AttendanceProjectionCard(
-                            state: state,
-                            subject: state.subjects[index],
-                          ),
+
+                        final width = (constraints.maxWidth - 10) / 2;
+                        return Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            for (final subject in state.subjects)
+                              SizedBox(
+                                width: width,
+                                child: _AttendanceProjectionCard(state: state, subject: subject),
+                              ),
+                          ],
                         );
                       },
                     ),
@@ -100,6 +98,7 @@ class AttendanceReviewScreen extends StatelessWidget {
 
 class _AttendanceProjectionCard extends StatelessWidget {
   const _AttendanceProjectionCard({required this.state, required this.subject});
+
   final AppState state;
   final Subject subject;
 
@@ -107,7 +106,18 @@ class _AttendanceProjectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final target = state.attendanceTarget(subject);
     final remaining = state.remainingAbsences(subject);
-    final projected = state.simulatedAttendance(subject, 1);
+    final nextBlock = _nextClassBlock(state, subject);
+    final nextClassCount = nextBlock?.classCount ?? 1;
+    final presentProjection = _projectAttendance(
+      subject,
+      additionalClasses: nextClassCount,
+      additionalAbsences: 0,
+    );
+    final absentProjection = _projectAttendance(
+      subject,
+      additionalClasses: nextClassCount,
+      additionalAbsences: nextClassCount,
+    );
     final risk = state.attendanceRiskLabel(subject);
     final riskColor = switch (risk) {
       'SEGURO' => AppColors.success,
@@ -115,6 +125,7 @@ class _AttendanceProjectionCard extends StatelessWidget {
       'RISCO' => AppColors.warning,
       _ => AppColors.danger,
     };
+
     return SoftCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,13 +142,22 @@ class _AttendanceProjectionCard extends StatelessWidget {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: riskColor.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)),
-                child: Text(risk, style: TextStyle(color: riskColor, fontWeight: FontWeight.w900, fontSize: 9)),
+                decoration: BoxDecoration(
+                  color: riskColor.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  risk,
+                  style: TextStyle(color: riskColor, fontWeight: FontWeight.w900, fontSize: 9),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 9),
-          Text('${subject.attendance.toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 28)),
+          Text(
+            '${subject.attendance.toStringAsFixed(1)}%',
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 28),
+          ),
           Text(
             '${subject.absences} falta${subject.absences == 1 ? '' : 's'} • ${subject.totalClasses} aulas contabilizadas',
             style: Theme.of(context).textTheme.bodySmall,
@@ -156,10 +176,90 @@ class _AttendanceProjectionCard extends StatelessWidget {
                 : 'Ainda pode faltar $remaining aula${remaining == 1 ? '' : 's'} mantendo a meta de ${target.toStringAsFixed(0)}%.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 5),
-          Text(
-            'Se faltar mais 1 aula → ${projected.toStringAsFixed(1)}%',
-            style: TextStyle(fontWeight: FontWeight.w800, color: projected < target ? AppColors.danger : AppColors.gold),
+          const SizedBox(height: 10),
+          if (nextBlock != null)
+            Text(
+              'Próxima aula: ${_date(nextBlock.date)} • ${nextBlock.start}–${nextBlock.end} • $nextClassCount aula${nextClassCount == 1 ? '' : 's'}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall,
+            )
+          else
+            Text(
+              'Sem próxima aula gerada. A projeção considera 1 aula.',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          const SizedBox(height: 8),
+          _ProjectionRow(
+            icon: Icons.check_circle_rounded,
+            label: 'Se estiver presente',
+            value: presentProjection,
+            color: AppColors.success,
+            target: target,
+          ),
+          const SizedBox(height: 7),
+          _ProjectionRow(
+            icon: Icons.cancel_rounded,
+            label: 'Se faltar',
+            value: absentProjection,
+            color: absentProjection < target ? AppColors.danger : AppColors.gold,
+            target: target,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProjectionRow extends StatelessWidget {
+  const _ProjectionRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.target,
+  });
+
+  final IconData icon;
+  final String label;
+  final double value;
+  final Color color;
+  final double target;
+
+  @override
+  Widget build(BuildContext context) {
+    final reachesTarget = value >= target;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: .16)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${value.toStringAsFixed(1)}%',
+                style: TextStyle(fontWeight: FontWeight.w900, color: color),
+              ),
+              Text(
+                reachesTarget ? 'meta atingida' : 'abaixo da meta',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
           ),
         ],
       ),
@@ -169,6 +269,7 @@ class _AttendanceProjectionCard extends StatelessWidget {
 
 class _AttendanceHistoryTile extends StatelessWidget {
   const _AttendanceHistoryTile({required this.state, required this.session});
+
   final AppState state;
   final ClassSession session;
 
@@ -186,6 +287,7 @@ class _AttendanceHistoryTile extends StatelessWidget {
       AttendanceStatus.cancelled => 'Cancelada',
       AttendanceStatus.pending => 'Pendente',
     };
+
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
@@ -220,4 +322,33 @@ class _AttendanceHistoryTile extends StatelessWidget {
   }
 }
 
-String _date(DateTime value) => '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
+ClassSession? _nextClassBlock(AppState state, Subject subject) {
+  if (subject.id == null) return null;
+  final now = DateTime.now();
+  final candidates = state.classSessions
+      .where(
+        (session) =>
+            session.subjectId == subject.id &&
+            session.status != AttendanceStatus.cancelled &&
+            session.startsAt.isAfter(now),
+      )
+      .toList()
+    ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
+  return candidates.isEmpty ? null : candidates.first;
+}
+
+double _projectAttendance(
+  Subject subject, {
+  required int additionalClasses,
+  required int additionalAbsences,
+}) {
+  final classes = additionalClasses.clamp(0, 9999).toInt();
+  final absences = additionalAbsences.clamp(0, classes).toInt();
+  final total = subject.totalClasses + classes;
+  final misses = subject.absences + absences;
+  if (total <= 0) return 100;
+  return ((total - misses).clamp(0, total) / total) * 100;
+}
+
+String _date(DateTime value) =>
+    '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
