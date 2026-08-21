@@ -311,12 +311,12 @@ class _QuickActions extends StatelessWidget {
         FilledButton.tonalIcon(
           onPressed: () => Navigator.push(context, motionRoute(const AttendanceReviewScreen())),
           icon: const Icon(Icons.how_to_reg_rounded),
-          label: const Text('Presença 2.0'),
+          label: const Text('Presença'),
         ),
         FilledButton.tonalIcon(
           onPressed: () => Navigator.push(context, motionRoute(const GradeLabScreen())),
           icon: const Icon(Icons.calculate_outlined),
-          label: const Text('Notas 2.0'),
+          label: const Text('Notas'),
         ),
         FilledButton.tonalIcon(
           onPressed: () => Navigator.push(context, motionRoute(const NotificationCenterScreen())),
