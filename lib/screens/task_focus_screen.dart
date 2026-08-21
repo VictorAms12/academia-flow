@@ -193,13 +193,7 @@ class _FocusTaskCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(child: Text(task.title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
               PopupMenuButton<String>(
-                onSelected: (value) async {
-                  if (value == 'edit') await showTaskEditor(context, state, task: task);
-                  if (value == 'tomorrow') await smart.postponeTask(task, const Duration(days: 1));
-                  if (value == 'week') await smart.postponeTask(task, const Duration(days: 7));
-                  if (value == 'duplicate') await smart.duplicateTask(task);
-                  if (value == 'done') await state.moveTask(task, TaskStatus.done);
-                },
+                onSelected: (value) => _handleAction(context, value),
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'edit', child: Text('Editar')),
                   PopupMenuItem(value: 'tomorrow', child: Text('Adiar 1 dia')),
@@ -234,6 +228,48 @@ class _FocusTaskCard extends StatelessWidget {
             Text('${task.completedSteps.length}/${task.checklist.length} etapas concluídas', style: Theme.of(context).textTheme.labelSmall),
           ],
         ],
+      ),
+    );
+  }
+
+  Future<void> _handleAction(BuildContext context, String value) async {
+    if (value == 'edit') {
+      await showTaskEditor(context, state, task: task);
+      return;
+    }
+
+    String? message;
+    VoidCallback? undo;
+    if (value == 'tomorrow') {
+      await smart.postponeTask(task, const Duration(days: 1));
+      message = 'Prazo adiado em 1 dia.';
+      undo = () => state.saveTask(task);
+    } else if (value == 'week') {
+      await smart.postponeTask(task, const Duration(days: 7));
+      message = 'Prazo adiado em 1 semana.';
+      undo = () => state.saveTask(task);
+    } else if (value == 'duplicate') {
+      await smart.duplicateTask(task);
+      message = 'Cópia da atividade criada.';
+    } else if (value == 'done') {
+      await state.moveTask(task, TaskStatus.done);
+      message = 'Atividade concluída.';
+      undo = () => state.moveTask(task, task.status);
+    }
+
+    if (!context.mounted || message == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(message),
+        action: undo == null
+            ? null
+            : SnackBarAction(
+                label: 'DESFAZER',
+                onPressed: undo,
+              ),
       ),
     );
   }
