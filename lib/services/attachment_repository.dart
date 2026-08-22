@@ -103,8 +103,14 @@ class AttachmentRepository {
     final added = <AcademicAttachment>[];
     for (final picked in files) {
       final sourcePath = picked.path;
-      if (sourcePath == null || sourcePath.trim().isEmpty) continue;
-      added.add(await _importFile(File(sourcePath), target: target, preferredName: picked.name));
+      if (sourcePath != null && sourcePath.trim().isNotEmpty) {
+        final source = File(sourcePath);
+        if (await source.exists()) {
+          added.add(await _importFile(source, target: target, preferredName: picked.name));
+          continue;
+        }
+      }
+      added.add(await _importPickedBytes(picked, target: target));
     }
     return added;
   }
@@ -136,6 +142,23 @@ class AttachmentRepository {
     return _importFile(File(image.path), target: target, preferredName: image.name);
   }
 
+  Future<AcademicAttachment> _importPickedBytes(
+    PlatformFile picked, {
+    required AttachmentTarget target,
+  }) async {
+    await initialize();
+    final originalName = _safeName(picked.name);
+    final uniqueName = '${DateTime.now().microsecondsSinceEpoch}_$originalName';
+    final destination = File(p.join(_root!.path, uniqueName));
+    final bytes = await picked.readAsBytes();
+    await destination.writeAsBytes(bytes, flush: true);
+    return _recordImportedFile(
+      destination,
+      target: target,
+      originalName: originalName,
+    );
+  }
+
   Future<AcademicAttachment> _importFile(
     File source, {
     required AttachmentTarget target,
@@ -148,19 +171,30 @@ class AttachmentRepository {
     final uniqueName = '${DateTime.now().microsecondsSinceEpoch}_$originalName';
     final destination = File(p.join(_root!.path, uniqueName));
     await source.copy(destination.path);
-    final bytes = await destination.length();
-    final kind = attachmentKindForName(originalName);
+    return _recordImportedFile(
+      destination,
+      target: target,
+      originalName: originalName,
+    );
+  }
 
+  Future<AcademicAttachment> _recordImportedFile(
+    File destination, {
+    required AttachmentTarget target,
+    required String originalName,
+  }) async {
+    final size = await destination.length();
+    final kind = attachmentKindForName(originalName);
     final item = AcademicAttachment(
       targetType: target.type,
       targetId: target.id,
       subjectId: target.subjectId,
       title: p.basenameWithoutExtension(originalName).trim().isEmpty ? originalName : p.basenameWithoutExtension(originalName),
       fileName: originalName,
-      storedPath: uniqueName,
+      storedPath: p.basename(destination.path),
       kind: kind,
       mimeType: _mimeForName(originalName),
-      sizeBytes: bytes,
+      sizeBytes: size,
       createdAt: DateTime.now(),
     );
 
