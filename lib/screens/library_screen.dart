@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/attachment.dart';
 import '../models/models.dart';
+import '../services/attachment_repository.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../utils/search_engine.dart';
 import '../widgets/v22_actions.dart';
+import 'attachment_manager_screen.dart';
 
 enum _LibrarySort { recent, title, subject }
 
@@ -19,27 +22,37 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProviderStateMixin {
   late final TabController tabs;
   final searchController = TextEditingController();
+  final attachments = AttachmentRepository.instance;
+
   String query = '';
   int? subjectFilter;
   String? tagFilter;
   MaterialKind? materialKindFilter;
+  AttachmentKind? attachmentKindFilter;
   bool pinnedOnly = false;
   _LibrarySort sort = _LibrarySort.recent;
+  late Future<List<AcademicAttachment>> attachmentFuture;
 
   @override
   void initState() {
     super.initState();
-    tabs = TabController(length: 2, vsync: this)..addListener(_onTabChanged);
+    tabs = TabController(length: 3, vsync: this)..addListener(_tabChanged);
+    attachmentFuture = attachments.allAttachments();
   }
 
-  void _onTabChanged() {
+  void _tabChanged() {
     if (!tabs.indexIsChanging && mounted) setState(() {});
+  }
+
+  Future<void> _reloadAttachments() async {
+    if (!mounted) return;
+    setState(() => attachmentFuture = attachments.allAttachments());
   }
 
   @override
   void dispose() {
     tabs
-      ..removeListener(_onTabChanged)
+      ..removeListener(_tabChanged)
       ..dispose();
     searchController.dispose();
     super.dispose();
@@ -48,7 +61,12 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
-    final tags = _allTags(state);
+    final allTags = <String>{
+      for (final note in state.notes)
+        ...note.tags.split(',').map((tag) => tag.trim()).where((tag) => tag.isNotEmpty),
+    }.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Biblioteca acadêmica'),
@@ -57,65 +75,196 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
           tabs: [
             Tab(text: 'Anotações (${state.notes.length})'),
             Tab(text: 'Materiais (${state.materials.length})'),
+            const Tab(text: 'Anexos'),
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: tabs.index == 0 ? 'Nova anotação' : 'Novo material',
-            icon: const Icon(Icons.add_rounded),
-            onPressed: () => tabs.index == 0 ? showNoteEditor(context, state) : showMaterialEditor(context, state),
-          ),
+          if (tabs.index < 2)
+            IconButton(
+              tooltip: tabs.index == 0 ? 'Nova anotação' : 'Novo material',
+              onPressed: () => tabs.index == 0 ? showNoteEditor(context, state) : showMaterialEditor(context, state),
+              icon: const Icon(Icons.add_rounded),
+            ),
         ],
       ),
       body: Column(
         children: [
-          _LibraryToolbar(
-            controller: searchController,
-            query: query,
-            subjects: state.subjects,
-            subjectFilter: subjectFilter,
-            sort: sort,
-            onQueryChanged: (value) => setState(() => query = value),
-            onClearQuery: () {
-              searchController.clear();
-              setState(() => query = '');
-            },
-            onSubjectChanged: (value) => setState(() => subjectFilter = value),
-            onSortChanged: (value) => setState(() => sort = value),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+            child: TextField(
+              controller: searchController,
+              onChanged: (value) => setState(() => query = value),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search_rounded),
+                hintText: tabs.index == 2 ? 'Buscar fotos e arquivos...' : 'Buscar na biblioteca...',
+                suffixIcon: query.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Limpar',
+                        onPressed: () {
+                          searchController.clear();
+                          setState(() => query = '');
+                        },
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+              ),
+            ),
           ),
-          AnimatedBuilder(
-            animation: tabs,
-            builder: (context, _) {
-              if (tabs.index == 0) {
-                return _NoteFilters(
-                  tags: tags,
-                  selectedTag: tagFilter,
-                  pinnedOnly: pinnedOnly,
-                  onTagChanged: (value) => setState(() => tagFilter = value),
-                  onPinnedChanged: (value) => setState(() => pinnedOnly = value),
-                );
-              }
-              return _MaterialFilters(
-                selected: materialKindFilter,
-                onChanged: (value) => setState(() => materialKindFilter = value),
-              );
-            },
-          ),
+          _commonFilters(state),
+          if (tabs.index == 0) _noteFilters(allTags),
+          if (tabs.index == 1) _materialFilters(),
+          if (tabs.index == 2) _attachmentFilters(),
           Expanded(
             child: TabBarView(
               controller: tabs,
               children: [
                 _notes(state),
                 _materials(state),
+                _attachments(state),
               ],
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => tabs.index == 0 ? showNoteEditor(context, state) : showMaterialEditor(context, state),
-        icon: const Icon(Icons.add_rounded),
-        label: Text(tabs.index == 0 ? 'Anotação' : 'Material'),
+      floatingActionButton: tabs.index < 2
+          ? FloatingActionButton.extended(
+              onPressed: () => tabs.index == 0 ? showNoteEditor(context, state) : showMaterialEditor(context, state),
+              icon: const Icon(Icons.add_rounded),
+              label: Text(tabs.index == 0 ? 'Anotação' : 'Material'),
+            )
+          : null,
+    );
+  }
+
+  Widget _commonFilters(AppState state) {
+    return SizedBox(
+      height: 50,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        children: [
+          DropdownButton<int?>(
+            value: subjectFilter,
+            hint: const Text('Todas as matérias'),
+            items: [
+              const DropdownMenuItem<int?>(value: null, child: Text('Todas as matérias')),
+              ...state.subjects.map((subject) => DropdownMenuItem<int?>(value: subject.id, child: Text(subject.name))),
+            ],
+            onChanged: (value) => setState(() => subjectFilter = value),
+          ),
+          const SizedBox(width: 14),
+          PopupMenuButton<_LibrarySort>(
+            tooltip: 'Ordenar',
+            onSelected: (value) => setState(() => sort = value),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: _LibrarySort.recent, child: Text('Mais recentes')),
+              PopupMenuItem(value: _LibrarySort.title, child: Text('Título A–Z')),
+              PopupMenuItem(value: _LibrarySort.subject, child: Text('Matéria')),
+            ],
+            child: Chip(
+              avatar: const Icon(Icons.sort_rounded, size: 17),
+              label: Text(switch (sort) {
+                _LibrarySort.recent => 'Recentes',
+                _LibrarySort.title => 'Título',
+                _LibrarySort.subject => 'Matéria',
+              }),
+            ),
+          ),
+          if (query.isNotEmpty || subjectFilter != null || tagFilter != null || pinnedOnly || materialKindFilter != null || attachmentKindFilter != null) ...[
+            const SizedBox(width: 8),
+            ActionChip(
+              avatar: const Icon(Icons.filter_alt_off_outlined, size: 17),
+              label: const Text('Limpar filtros'),
+              onPressed: () {
+                searchController.clear();
+                setState(() {
+                  query = '';
+                  subjectFilter = null;
+                  tagFilter = null;
+                  pinnedOnly = false;
+                  materialKindFilter = null;
+                  attachmentKindFilter = null;
+                });
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _noteFilters(List<String> tags) {
+    return SizedBox(
+      height: 48,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+        children: [
+          FilterChip(
+            selected: pinnedOnly,
+            avatar: const Icon(Icons.push_pin_outlined, size: 16),
+            label: const Text('Fixadas'),
+            onSelected: (value) => setState(() => pinnedOnly = value),
+          ),
+          for (final tag in tags) ...[
+            const SizedBox(width: 6),
+            FilterChip(
+              selected: tagFilter == tag,
+              label: Text(tag),
+              onSelected: (selected) => setState(() => tagFilter = selected ? tag : null),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _materialFilters() {
+    return SizedBox(
+      height: 48,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+        children: [
+          ChoiceChip(
+            selected: materialKindFilter == null,
+            label: const Text('Todos'),
+            onSelected: (_) => setState(() => materialKindFilter = null),
+          ),
+          for (final kind in MaterialKind.values) ...[
+            const SizedBox(width: 6),
+            ChoiceChip(
+              selected: materialKindFilter == kind,
+              label: Text(materialKindLabel(kind)),
+              onSelected: (_) => setState(() => materialKindFilter = kind),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _attachmentFilters() {
+    return SizedBox(
+      height: 48,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+        children: [
+          ChoiceChip(
+            selected: attachmentKindFilter == null,
+            label: const Text('Todos'),
+            onSelected: (_) => setState(() => attachmentKindFilter = null),
+          ),
+          for (final kind in AttachmentKind.values) ...[
+            const SizedBox(width: 6),
+            ChoiceChip(
+              selected: attachmentKindFilter == kind,
+              label: Text(attachmentKindLabel(kind)),
+              onSelected: (_) => setState(() => attachmentKindFilter = kind),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -124,89 +273,79 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
     final items = state.notes.where((note) {
       if (subjectFilter != null && note.subjectId != subjectFilter) return false;
       if (pinnedOnly && !note.pinned) return false;
-      if (tagFilter != null && !_noteTags(note).contains(tagFilter)) return false;
+      final tags = note.tags.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      if (tagFilter != null && !tags.contains(tagFilter)) return false;
       return query.trim().isEmpty ||
-          matchesSearch(query, [
-            note.title,
-            note.content,
-            note.tags,
-            note.link,
-            state.subjectName(note.subjectId),
-          ]);
+          matchesSearch(query, [note.title, note.content, note.tags, note.link, state.subjectName(note.subjectId)]);
     }).toList();
 
     items.sort((a, b) {
       if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
-      return _compareLibraryItems(
-        aTitle: a.title,
-        bTitle: b.title,
-        aSubject: state.subjectName(a.subjectId),
-        bSubject: state.subjectName(b.subjectId),
-        aCreated: a.createdAt,
-        bCreated: b.createdAt,
+      return _compare(
+        a.title,
+        b.title,
+        state.subjectName(a.subjectId),
+        state.subjectName(b.subjectId),
+        a.createdAt,
+        b.createdAt,
       );
     });
 
-    if (items.isEmpty) {
-      return _empty(
-        Icons.note_alt_outlined,
-        query.isNotEmpty || subjectFilter != null || tagFilter != null || pinnedOnly
-            ? 'Nenhuma anotação encontrada'
-            : 'Nenhuma anotação',
-        query.isNotEmpty || subjectFilter != null || tagFilter != null || pinnedOnly
-            ? 'Ajuste a busca ou remova algum filtro.'
-            : 'Guarde resumos, lembretes, tópicos de revisão e links.',
-        () => showNoteEditor(context, state),
-      );
-    }
-
+    if (items.isEmpty) return _empty('Nenhuma anotação encontrada', Icons.note_alt_outlined);
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 90),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
       itemCount: items.length,
-      itemBuilder: (_, i) {
-        final note = items[i];
-        final tags = _noteTags(note);
+      itemBuilder: (_, index) {
+        final note = items[index];
+        final noteTags = note.tags.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
-          clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () => showNoteEditor(context, state, note: note),
+            borderRadius: BorderRadius.circular(16),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(15),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      if (note.pinned)
-                        const Padding(
-                          padding: EdgeInsets.only(right: 7),
-                          child: Icon(Icons.push_pin_rounded, size: 17, color: AppColors.gold),
+                      if (note.pinned) const Icon(Icons.push_pin_rounded, size: 17, color: AppColors.gold),
+                      if (note.pinned) const SizedBox(width: 6),
+                      Expanded(child: Text(note.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
+                      if (note.id != null)
+                        IconButton(
+                          tooltip: 'Anexos',
+                          onPressed: () async {
+                            await showAttachmentManager(
+                              context,
+                              target: AttachmentTarget(type: AttachmentTargetType.note, id: note.id!, subjectId: note.subjectId),
+                              title: note.title,
+                            );
+                            await _reloadAttachments();
+                          },
+                          icon: const Icon(Icons.attach_file_rounded),
                         ),
-                      Expanded(
-                        child: Text(
-                          note.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: note.pinned ? 'Desafixar' : 'Fixar',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => _toggleNotePin(state, note),
-                        icon: Icon(note.pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined),
-                      ),
                       PopupMenuButton<String>(
                         onSelected: (value) async {
-                          if (value == 'edit') await showNoteEditor(context, state, note: note);
-                          if (value == 'open') await _openUrl(note.link);
-                          if (value == 'delete' && await confirmDelete(context, note.title)) {
-                            await state.deleteNote(note);
+                          if (value == 'pin') {
+                            await state.saveNote(AcademicNote(
+                              id: note.id,
+                              subjectId: note.subjectId,
+                              title: note.title,
+                              content: note.content,
+                              link: note.link,
+                              tags: note.tags,
+                              pinned: !note.pinned,
+                              createdAt: note.createdAt,
+                              sessionId: note.sessionId,
+                            ));
                           }
+                          if (value == 'open' && _canOpen(note.link)) await launchUrl(Uri.parse(note.link), mode: LaunchMode.externalApplication);
+                          if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);
                         },
                         itemBuilder: (_) => [
-                          const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                          PopupMenuItem(value: 'pin', child: Text(note.pinned ? 'Desafixar' : 'Fixar')),
                           if (_canOpen(note.link)) const PopupMenuItem(value: 'open', child: Text('Abrir link')),
                           const PopupMenuDivider(),
                           const PopupMenuItem(value: 'delete', child: Text('Excluir')),
@@ -214,36 +353,24 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
                       ),
                     ],
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${state.subjectName(note.subjectId)} • ${_formatDate(note.createdAt)}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  Text('${state.subjectName(note.subjectId)} • ${_date(note.createdAt)}', style: Theme.of(context).textTheme.bodySmall),
                   if (note.content.isNotEmpty) ...[
-                    const SizedBox(height: 9),
+                    const SizedBox(height: 8),
                     Text(note.content, maxLines: 4, overflow: TextOverflow.ellipsis),
                   ],
-                  if (tags.isNotEmpty) ...[
-                    const SizedBox(height: 10),
+                  if (noteTags.isNotEmpty) ...[
+                    const SizedBox(height: 9),
                     Wrap(
                       spacing: 6,
-                      runSpacing: 6,
+                      runSpacing: 5,
                       children: [
-                        for (final tag in tags)
+                        for (final tag in noteTags)
                           ActionChip(
-                            label: Text(tag),
                             visualDensity: VisualDensity.compact,
+                            label: Text(tag),
                             onPressed: () => setState(() => tagFilter = tag),
                           ),
                       ],
-                    ),
-                  ],
-                  if (_canOpen(note.link)) ...[
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () => _openUrl(note.link),
-                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                      label: const Text('Abrir link relacionado'),
                     ),
                   ],
                 ],
@@ -260,86 +387,77 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
       if (subjectFilter != null && material.subjectId != subjectFilter) return false;
       if (materialKindFilter != null && material.kind != materialKindFilter) return false;
       return query.trim().isEmpty ||
-          matchesSearch(query, [
-            material.title,
-            material.description,
-            material.url,
-            materialKindLabel(material.kind),
-            state.subjectName(material.subjectId),
-          ]);
+          matchesSearch(query, [material.title, material.description, material.url, materialKindLabel(material.kind), state.subjectName(material.subjectId)]);
     }).toList();
 
-    items.sort((a, b) => _compareLibraryItems(
-          aTitle: a.title,
-          bTitle: b.title,
-          aSubject: state.subjectName(a.subjectId),
-          bSubject: state.subjectName(b.subjectId),
-          aCreated: a.createdAt,
-          bCreated: b.createdAt,
+    items.sort((a, b) => _compare(
+          a.title,
+          b.title,
+          state.subjectName(a.subjectId),
+          state.subjectName(b.subjectId),
+          a.createdAt,
+          b.createdAt,
         ));
 
-    if (items.isEmpty) {
-      return _empty(
-        Icons.folder_open_rounded,
-        query.isNotEmpty || subjectFilter != null || materialKindFilter != null
-            ? 'Nenhum material encontrado'
-            : 'Nenhum material',
-        query.isNotEmpty || subjectFilter != null || materialKindFilter != null
-            ? 'Ajuste a busca ou remova algum filtro.'
-            : 'Organize PDFs, slides, vídeos, links, documentos e repositórios.',
-        state.subjects.isEmpty ? null : () => showMaterialEditor(context, state),
-      );
-    }
-
+    if (items.isEmpty) return _empty('Nenhum material encontrado', Icons.folder_open_outlined);
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 90),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
       itemCount: items.length,
-      itemBuilder: (_, i) {
-        final material = items[i];
+      itemBuilder: (_, index) {
+        final material = items[index];
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: ListTile(
-              contentPadding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-              leading: CircleAvatar(
-                backgroundColor: AppColors.gold.withValues(alpha: .12),
-                child: Icon(_icon(material.kind), color: AppColors.gold),
-              ),
-              title: Text(material.title, style: const TextStyle(fontWeight: FontWeight.w900)),
-              subtitle: Text(
-                '${materialKindLabel(material.kind)} • ${state.subjectName(material.subjectId)} • ${_formatDate(material.createdAt)}'
-                '${material.description.isEmpty ? '' : '\n${material.description}'}',
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () => showMaterialEditor(context, state, material: material),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_canOpen(material.url))
-                    IconButton(
-                      tooltip: 'Abrir material',
-                      onPressed: () => _openUrl(material.url),
-                      icon: const Icon(Icons.open_in_new_rounded),
-                    ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      if (value == 'edit') await showMaterialEditor(context, state, material: material);
-                      if (value == 'open') await _openUrl(material.url);
-                      if (value == 'delete' && await confirmDelete(context, material.title)) {
-                        await state.deleteMaterial(material);
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      const PopupMenuItem(value: 'edit', child: Text('Editar')),
-                      if (_canOpen(material.url)) const PopupMenuItem(value: 'open', child: Text('Abrir material')),
-                      const PopupMenuDivider(),
-                      const PopupMenuItem(value: 'delete', child: Text('Excluir')),
-                    ],
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(12),
+            leading: CircleAvatar(
+              backgroundColor: AppColors.gold.withValues(alpha: .10),
+              child: Icon(_materialIcon(material.kind), color: AppColors.gold),
+            ),
+            title: Text(material.title, style: const TextStyle(fontWeight: FontWeight.w900)),
+            subtitle: Text(
+              '${state.subjectName(material.subjectId)} • ${materialKindLabel(material.kind)}${material.description.isEmpty ? '' : '\n${material.description}'}',
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            onTap: () => showMaterialEditor(context, state, material: material),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_canOpen(material.url))
+                  IconButton(
+                    tooltip: 'Abrir link',
+                    onPressed: () => launchUrl(Uri.parse(material.url), mode: LaunchMode.externalApplication),
+                    icon: const Icon(Icons.open_in_new_rounded),
                   ),
-                ],
-              ),
+                if (material.id != null)
+                  IconButton(
+                    tooltip: 'Anexos',
+                    onPressed: () async {
+                      await showAttachmentManager(
+                        context,
+                        target: AttachmentTarget(
+                          type: AttachmentTargetType.material,
+                          id: material.id!,
+                          subjectId: material.subjectId,
+                        ),
+                        title: material.title,
+                      );
+                      await _reloadAttachments();
+                    },
+                    icon: const Icon(Icons.attach_file_rounded),
+                  ),
+                PopupMenuButton<String>(
+                  onSelected: (value) async {
+                    if (value == 'edit') await showMaterialEditor(context, state, material: material);
+                    if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Editar')),
+                    PopupMenuDivider(),
+                    PopupMenuItem(value: 'delete', child: Text('Excluir')),
+                  ],
+                ),
+              ],
             ),
           ),
         );
@@ -347,70 +465,63 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
     );
   }
 
-  int _compareLibraryItems({
-    required String aTitle,
-    required String bTitle,
-    required String aSubject,
-    required String bSubject,
-    required DateTime aCreated,
-    required DateTime bCreated,
-  }) {
-    return switch (sort) {
-      _LibrarySort.recent => bCreated.compareTo(aCreated),
-      _LibrarySort.title => aTitle.toLowerCase().compareTo(bTitle.toLowerCase()),
-      _LibrarySort.subject => aSubject.toLowerCase().compareTo(bSubject.toLowerCase()),
-    };
-  }
+  Widget _attachments(AppState state) {
+    return FutureBuilder<List<AcademicAttachment>>(
+      future: attachmentFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+        if (snapshot.hasError) return _empty('Não foi possível carregar os anexos', Icons.error_outline_rounded);
+        final items = (snapshot.data ?? const <AcademicAttachment>[]).where((item) {
+          if (subjectFilter != null && item.subjectId != subjectFilter) return false;
+          if (attachmentKindFilter != null && item.kind != attachmentKindFilter) return false;
+          return query.trim().isEmpty ||
+              matchesSearch(query, [item.title, item.fileName, attachmentKindLabel(item.kind), state.subjectName(item.subjectId)]);
+        }).toList();
 
-  List<String> _allTags(AppState state) {
-    final tags = <String>{};
-    for (final note in state.notes) {
-      tags.addAll(_noteTags(note));
-    }
-    final list = tags.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return list;
-  }
+        items.sort((a, b) => _compare(
+              a.title,
+              b.title,
+              state.subjectName(a.subjectId),
+              state.subjectName(b.subjectId),
+              a.createdAt,
+              b.createdAt,
+            ));
 
-  List<String> _noteTags(AcademicNote note) => note.tags
-      .split(',')
-      .map((tag) => tag.trim())
-      .where((tag) => tag.isNotEmpty)
-      .toSet()
-      .toList();
-
-  Future<void> _toggleNotePin(AppState state, AcademicNote note) async {
-    await state.saveNote(
-      AcademicNote(
-        id: note.id,
-        subjectId: note.subjectId,
-        title: note.title,
-        content: note.content,
-        link: note.link,
-        tags: note.tags,
-        pinned: !note.pinned,
-        createdAt: note.createdAt,
-        sessionId: note.sessionId,
-      ),
+        if (items.isEmpty) return _empty('Nenhum anexo encontrado', Icons.attach_file_rounded);
+        return RefreshIndicator(
+          onRefresh: _reloadAttachments,
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 30),
+            itemCount: items.length,
+            itemBuilder: (_, index) {
+              final item = items[index];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 9),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.gold.withValues(alpha: .10),
+                    child: Icon(_attachmentIcon(item.kind), color: AppColors.gold),
+                  ),
+                  title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  subtitle: Text(
+                    '${state.subjectName(item.subjectId)} • ${attachmentTargetLabel(item.targetType)} • ${attachmentKindLabel(item.kind)}\n${item.fileName}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () async {
+                    await showAttachmentManager(context, target: item.target, title: item.title);
+                    await _reloadAttachments();
+                  },
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
-  bool _canOpen(String value) {
-    final uri = Uri.tryParse(value.trim());
-    return uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
-  }
-
-  Future<void> _openUrl(String value) async {
-    final uri = Uri.tryParse(value.trim());
-    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) return;
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível abrir este link.')),
-      );
-    }
-  }
-
-  Widget _empty(IconData icon, String title, String message, VoidCallback? action) => Center(
+  Widget _empty(String title, IconData icon) => Center(
         child: Padding(
           padding: const EdgeInsets.all(30),
           child: Column(
@@ -418,194 +529,42 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
             children: [
               Icon(icon, size: 50),
               const SizedBox(height: 12),
-              Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
+              Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
               const SizedBox(height: 6),
-              Text(message, textAlign: TextAlign.center),
-              if (action != null) ...[
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: action,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Adicionar'),
-                ),
-              ],
+              const Text('Ajuste os filtros ou adicione novos conteúdos.', textAlign: TextAlign.center),
             ],
           ),
         ),
       );
 
-  IconData _icon(MaterialKind kind) => switch (kind) {
-        MaterialKind.pdf => Icons.picture_as_pdf_rounded,
-        MaterialKind.slides => Icons.slideshow_rounded,
-        MaterialKind.video => Icons.play_circle_outline_rounded,
-        MaterialKind.repository => Icons.code_rounded,
-        MaterialKind.document => Icons.description_outlined,
-        MaterialKind.other => Icons.attach_file_rounded,
-        MaterialKind.link => Icons.link_rounded,
+  int _compare(String aTitle, String bTitle, String aSubject, String bSubject, DateTime aCreated, DateTime bCreated) => switch (sort) {
+        _LibrarySort.recent => bCreated.compareTo(aCreated),
+        _LibrarySort.title => aTitle.toLowerCase().compareTo(bTitle.toLowerCase()),
+        _LibrarySort.subject => aSubject.toLowerCase().compareTo(bSubject.toLowerCase()),
       };
 }
 
-class _LibraryToolbar extends StatelessWidget {
-  const _LibraryToolbar({
-    required this.controller,
-    required this.query,
-    required this.subjects,
-    required this.subjectFilter,
-    required this.sort,
-    required this.onQueryChanged,
-    required this.onClearQuery,
-    required this.onSubjectChanged,
-    required this.onSortChanged,
-  });
-
-  final TextEditingController controller;
-  final String query;
-  final List<Subject> subjects;
-  final int? subjectFilter;
-  final _LibrarySort sort;
-  final ValueChanged<String> onQueryChanged;
-  final VoidCallback onClearQuery;
-  final ValueChanged<int?> onSubjectChanged;
-  final ValueChanged<_LibrarySort> onSortChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Column(
-        children: [
-          TextField(
-            controller: controller,
-            onChanged: onQueryChanged,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search_rounded),
-              hintText: 'Buscar título, conteúdo, tag, matéria ou link...',
-              suffixIcon: query.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Limpar busca',
-                      onPressed: onClearQuery,
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-            ),
-          ),
-          const SizedBox(height: 9),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                DropdownButton<int?>(
-                  value: subjectFilter,
-                  hint: const Text('Todas as matérias'),
-                  items: [
-                    const DropdownMenuItem<int?>(value: null, child: Text('Todas as matérias')),
-                    ...subjects.map((subject) => DropdownMenuItem<int?>(value: subject.id, child: Text(subject.name))),
-                  ],
-                  onChanged: onSubjectChanged,
-                ),
-                const SizedBox(width: 18),
-                DropdownButton<_LibrarySort>(
-                  value: sort,
-                  items: const [
-                    DropdownMenuItem(value: _LibrarySort.recent, child: Text('Mais recentes')),
-                    DropdownMenuItem(value: _LibrarySort.title, child: Text('Título A–Z')),
-                    DropdownMenuItem(value: _LibrarySort.subject, child: Text('Por matéria')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) onSortChanged(value);
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+bool _canOpen(String value) {
+  final uri = Uri.tryParse(value.trim());
+  return uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
 }
 
-class _NoteFilters extends StatelessWidget {
-  const _NoteFilters({
-    required this.tags,
-    required this.selectedTag,
-    required this.pinnedOnly,
-    required this.onTagChanged,
-    required this.onPinnedChanged,
-  });
+String _date(DateTime date) => '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
-  final List<String> tags;
-  final String? selectedTag;
-  final bool pinnedOnly;
-  final ValueChanged<String?> onTagChanged;
-  final ValueChanged<bool> onPinnedChanged;
+IconData _materialIcon(MaterialKind kind) => switch (kind) {
+      MaterialKind.pdf => Icons.picture_as_pdf_rounded,
+      MaterialKind.slides => Icons.slideshow_rounded,
+      MaterialKind.video => Icons.play_circle_outline_rounded,
+      MaterialKind.repository => Icons.code_rounded,
+      MaterialKind.document => Icons.description_outlined,
+      MaterialKind.other => Icons.attach_file_rounded,
+      MaterialKind.link => Icons.link_rounded,
+    };
 
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 46,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-        children: [
-          FilterChip(
-            selected: pinnedOnly,
-            avatar: const Icon(Icons.push_pin_outlined, size: 16),
-            label: const Text('Fixadas'),
-            onSelected: onPinnedChanged,
-          ),
-          const SizedBox(width: 7),
-          ChoiceChip(
-            selected: selectedTag == null,
-            label: const Text('Todas as tags'),
-            onSelected: (_) => onTagChanged(null),
-          ),
-          for (final tag in tags) ...[
-            const SizedBox(width: 7),
-            ChoiceChip(
-              selected: selectedTag == tag,
-              label: Text('#$tag'),
-              onSelected: (_) => onTagChanged(selectedTag == tag ? null : tag),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _MaterialFilters extends StatelessWidget {
-  const _MaterialFilters({required this.selected, required this.onChanged});
-
-  final MaterialKind? selected;
-  final ValueChanged<MaterialKind?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 46,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-        children: [
-          ChoiceChip(
-            selected: selected == null,
-            label: const Text('Todos os tipos'),
-            onSelected: (_) => onChanged(null),
-          ),
-          for (final kind in MaterialKind.values) ...[
-            const SizedBox(width: 7),
-            ChoiceChip(
-              selected: selected == kind,
-              label: Text(materialKindLabel(kind)),
-              onSelected: (_) => onChanged(selected == kind ? null : kind),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-String _formatDate(DateTime value) =>
-    '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
+IconData _attachmentIcon(AttachmentKind kind) => switch (kind) {
+      AttachmentKind.image => Icons.image_outlined,
+      AttachmentKind.pdf => Icons.picture_as_pdf_outlined,
+      AttachmentKind.document => Icons.description_outlined,
+      AttachmentKind.archive => Icons.folder_zip_outlined,
+      AttachmentKind.other => Icons.insert_drive_file_outlined,
+    };
