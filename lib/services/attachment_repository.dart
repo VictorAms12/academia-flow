@@ -98,13 +98,10 @@ class AttachmentRepository {
   Future<List<AcademicAttachment>> pickFiles({
     required AttachmentTarget target,
   }) async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      withData: false,
-    );
-    if (result == null) return const [];
+    final files = await FilePicker.pickFiles();
+    if (files.isEmpty) return const [];
     final added = <AcademicAttachment>[];
-    for (final picked in result.files) {
+    for (final picked in files) {
       final sourcePath = picked.path;
       if (sourcePath == null || sourcePath.trim().isEmpty) continue;
       added.add(await _importFile(File(sourcePath), target: target, preferredName: picked.name));
