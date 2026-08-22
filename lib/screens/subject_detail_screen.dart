@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+
+import '../models/attachment.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/v22_actions.dart';
+import 'attachment_manager_screen.dart';
 
 class SubjectDetailScreen extends StatefulWidget {
   const SubjectDetailScreen({super.key, required this.subjectId});
@@ -253,12 +256,33 @@ class _SubjectTaskCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: Text(task.title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+          if (task.id != null)
+            IconButton(
+              tooltip: 'Anexos',
+              onPressed: () => showAttachmentManager(
+                context,
+                target: AttachmentTarget(type: AttachmentTargetType.task, id: task.id!, subjectId: task.subjectId),
+                title: task.title,
+              ),
+              icon: const Icon(Icons.attach_file_rounded),
+            ),
           PopupMenuButton<String>(
             onSelected: (value) async {
               if (value == 'edit') await showTaskEditor(context, state, task: task);
+              if (value == 'attachments' && task.id != null) {
+                await showAttachmentManager(
+                  context,
+                  target: AttachmentTarget(type: AttachmentTargetType.task, id: task.id!, subjectId: task.subjectId),
+                  title: task.title,
+                );
+              }
               if (value == 'delete' && await confirmDelete(context, task.title)) await state.deleteTask(task);
             },
-            itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Excluir'))],
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Text('Editar')),
+              if (task.id != null) const PopupMenuItem(value: 'attachments', child: Text('Anexos')),
+              const PopupMenuItem(value: 'delete', child: Text('Excluir')),
+            ],
           ),
         ]),
         Wrap(spacing: 7, runSpacing: 7, children: [
@@ -387,12 +411,33 @@ class _ResourcesTab extends StatelessWidget {
                       SelectableText(material.url, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12)),
                     ],
                   ])),
+                  if (material.id != null)
+                    IconButton(
+                      tooltip: 'Anexos',
+                      onPressed: () => showAttachmentManager(
+                        context,
+                        target: AttachmentTarget(type: AttachmentTargetType.material, id: material.id!, subjectId: material.subjectId),
+                        title: material.title,
+                      ),
+                      icon: const Icon(Icons.attach_file_rounded),
+                    ),
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showMaterialEditor(context, state, material: material);
+                      if (value == 'attachments' && material.id != null) {
+                        await showAttachmentManager(
+                          context,
+                          target: AttachmentTarget(type: AttachmentTargetType.material, id: material.id!, subjectId: material.subjectId),
+                          title: material.title,
+                        );
+                      }
                       if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);
                     },
-                    itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Excluir'))],
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                      if (material.id != null) const PopupMenuItem(value: 'attachments', child: Text('Anexos')),
+                      const PopupMenuItem(value: 'delete', child: Text('Excluir')),
+                    ],
                   ),
                 ]),
               ),
@@ -431,12 +476,33 @@ class _ResourcesTab extends StatelessWidget {
                       SelectableText(note.link, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontSize: 12)),
                     ],
                   ])),
+                  if (note.id != null)
+                    IconButton(
+                      tooltip: 'Anexos',
+                      onPressed: () => showAttachmentManager(
+                        context,
+                        target: AttachmentTarget(type: AttachmentTargetType.note, id: note.id!, subjectId: note.subjectId),
+                        title: note.title,
+                      ),
+                      icon: const Icon(Icons.attach_file_rounded),
+                    ),
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showNoteEditor(context, state, note: note);
+                      if (value == 'attachments' && note.id != null) {
+                        await showAttachmentManager(
+                          context,
+                          target: AttachmentTarget(type: AttachmentTargetType.note, id: note.id!, subjectId: note.subjectId),
+                          title: note.title,
+                        );
+                      }
                       if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);
                     },
-                    itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Excluir'))],
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                      if (note.id != null) const PopupMenuItem(value: 'attachments', child: Text('Anexos')),
+                      const PopupMenuItem(value: 'delete', child: Text('Excluir')),
+                    ],
                   ),
                 ]),
               ),
