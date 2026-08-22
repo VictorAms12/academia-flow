@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/attachment.dart';
 import '../models/models.dart';
 import '../models/v26_models.dart';
 import '../state/app_state.dart';
@@ -7,6 +8,7 @@ import '../state/v26_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/v22_actions.dart';
+import 'attachment_manager_screen.dart';
 
 enum _TaskFocusFilter { priority, overdue, today, week, exams }
 
@@ -147,13 +149,19 @@ class _SummaryChip extends StatelessWidget {
   final String label;
   final String value;
   final bool danger;
+
   @override
   Widget build(BuildContext context) => SoftCard(
         padding: const EdgeInsets.all(13),
         child: Row(children: [
           Icon(icon, color: danger ? AppColors.danger : Theme.of(context).colorScheme.primary),
           const SizedBox(width: 8),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 19)), Text(label, style: Theme.of(context).textTheme.labelSmall)])),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 19)),
+              Text(label, style: Theme.of(context).textTheme.labelSmall),
+            ]),
+          ),
         ]),
       );
 }
@@ -173,7 +181,11 @@ class _FocusTaskCard extends StatelessWidget {
     final days = due.difference(today).inDays;
     final overdue = days < 0;
     final score = taskUrgencyScore(task);
-    final accent = overdue || score >= 100 ? AppColors.danger : score >= 65 ? AppColors.warning : Theme.of(context).colorScheme.primary;
+    final accent = overdue || score >= 100
+        ? AppColors.danger
+        : score >= 65
+            ? AppColors.warning
+            : Theme.of(context).colorScheme.primary;
     final progress = task.checklist.isEmpty ? null : task.completedSteps.length / task.checklist.length;
 
     return SoftCard(
@@ -194,13 +206,14 @@ class _FocusTaskCard extends StatelessWidget {
               Expanded(child: Text(task.title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
               PopupMenuButton<String>(
                 onSelected: (value) => _handleAction(context, value),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'edit', child: Text('Editar')),
-                  PopupMenuItem(value: 'tomorrow', child: Text('Adiar 1 dia')),
-                  PopupMenuItem(value: 'week', child: Text('Adiar 1 semana')),
-                  PopupMenuItem(value: 'duplicate', child: Text('Duplicar')),
-                  PopupMenuDivider(),
-                  PopupMenuItem(value: 'done', child: Text('Marcar como concluída')),
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                  if (task.id != null) const PopupMenuItem(value: 'attachments', child: Text('Anexos')),
+                  const PopupMenuItem(value: 'tomorrow', child: Text('Adiar 1 dia')),
+                  const PopupMenuItem(value: 'week', child: Text('Adiar 1 semana')),
+                  const PopupMenuItem(value: 'duplicate', child: Text('Duplicar')),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'done', child: Text('Marcar como concluída')),
                 ],
               ),
             ],
@@ -215,6 +228,12 @@ class _FocusTaskCard extends StatelessWidget {
               _Pill(label: _deadline(days), icon: Icons.schedule_rounded, color: accent),
               _Pill(label: _priority(task.priority), icon: Icons.flag_outlined, color: _priorityColor(task.priority)),
               if (task.status == TaskStatus.doing) const _Pill(label: 'Em andamento', icon: Icons.timelapse_rounded, color: AppColors.gold),
+              if (task.id != null)
+                ActionChip(
+                  avatar: const Icon(Icons.attach_file_rounded, size: 15),
+                  label: const Text('Anexos'),
+                  onPressed: () => _openAttachments(context),
+                ),
             ],
           ),
           if (task.description.isNotEmpty) ...[
@@ -232,9 +251,22 @@ class _FocusTaskCard extends StatelessWidget {
     );
   }
 
+  Future<void> _openAttachments(BuildContext context) async {
+    if (task.id == null) return;
+    await showAttachmentManager(
+      context,
+      target: AttachmentTarget(type: AttachmentTargetType.task, id: task.id!, subjectId: task.subjectId),
+      title: task.title,
+    );
+  }
+
   Future<void> _handleAction(BuildContext context, String value) async {
     if (value == 'edit') {
       await showTaskEditor(context, state, task: task);
+      return;
+    }
+    if (value == 'attachments') {
+      await _openAttachments(context);
       return;
     }
 
@@ -264,12 +296,7 @@ class _FocusTaskCard extends StatelessWidget {
       SnackBar(
         behavior: SnackBarBehavior.floating,
         content: Text(message),
-        action: undo == null
-            ? null
-            : SnackBarAction(
-                label: 'DESFAZER',
-                onPressed: undo,
-              ),
+        action: undo == null ? null : SnackBarAction(label: 'DESFAZER', onPressed: undo),
       ),
     );
   }
@@ -280,11 +307,19 @@ class _Pill extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
+
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
         decoration: BoxDecoration(color: color.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 13, color: color), const SizedBox(width: 4), Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800))]),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800)),
+          ],
+        ),
       );
 }
 
@@ -295,7 +330,22 @@ String _deadline(int days) {
   return 'Em $days dias';
 }
 
-String _priority(Priority value) => switch (value) { Priority.high => 'Alta', Priority.medium => 'Média', Priority.low => 'Baixa' };
-Color _priorityColor(Priority value) => switch (value) { Priority.high => AppColors.danger, Priority.medium => AppColors.gold, Priority.low => AppColors.success };
-String _kind(TaskKind value) => switch (value) { TaskKind.activity => 'Atividade', TaskKind.exam => 'Prova', TaskKind.seminar => 'Seminário', TaskKind.project => 'Projeto', TaskKind.reading => 'Leitura', TaskKind.other => 'Outro' };
+String _priority(Priority value) => switch (value) {
+      Priority.high => 'Alta',
+      Priority.medium => 'Média',
+      Priority.low => 'Baixa',
+    };
+Color _priorityColor(Priority value) => switch (value) {
+      Priority.high => AppColors.danger,
+      Priority.medium => AppColors.gold,
+      Priority.low => AppColors.success,
+    };
+String _kind(TaskKind value) => switch (value) {
+      TaskKind.activity => 'Atividade',
+      TaskKind.exam => 'Prova',
+      TaskKind.seminar => 'Seminário',
+      TaskKind.project => 'Projeto',
+      TaskKind.reading => 'Leitura',
+      TaskKind.other => 'Outro',
+    };
 bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
