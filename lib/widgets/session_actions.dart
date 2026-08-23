@@ -45,17 +45,14 @@ Future<void> showExtraClassEditor(BuildContext context, AppState state, {ClassSe
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
             FilledButton(onPressed: () async {
               if (_minutes(end) <= _minutes(start)) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(
-                  const SnackBar(content: Text('O horário final deve ser posterior ao horário inicial.')),
-                );
+                ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('O horário final deve ser posterior ao horário inicial.')));
                 return;
               }
               try {
                 await state.saveClassSession(ClassSession(subjectId: subjectId, date: date, start: _time(start), end: _time(end), room: room.text.trim(), classCount: classCount, kind: kind, makeupForSessionId: makeupFor?.id, createdAt: DateTime.now()));
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
               } catch (error) {
-                if (!dialogContext.mounted) return;
-                ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('Não foi possível adicionar a aula: $error')));
+                if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('Não foi possível adicionar a aula: $error')));
               }
             }, child: const Text('Adicionar')),
           ],
@@ -67,28 +64,80 @@ Future<void> showExtraClassEditor(BuildContext context, AppState state, {ClassSe
   }
 }
 
-Future<void> showSessionNoteEditor(BuildContext context, AppState state, ClassSession session) async {
-  final title = TextEditingController(text: 'Aula ${formatRoutineDate(session.date)}');
-  final content = TextEditingController();
+Future<void> showSessionNoteEditor(BuildContext context, AppState state, ClassSession session, {AcademicNote? note}) async {
+  final editing = note != null;
+  final title = TextEditingController(text: note?.title ?? 'Aula ${formatRoutineDate(session.date)}');
+  final content = TextEditingController(text: note?.content ?? '');
+  final tags = TextEditingController(text: note?.tags ?? '');
+  var saving = false;
+  String? error;
   try {
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Anotação da aula'),
-        content: SizedBox(width: 520, child: Column(mainAxisSize: MainAxisSize.min, children: [TextField(controller: title, decoration: const InputDecoration(labelText: 'Título')), const SizedBox(height: 12), TextField(controller: content, minLines: 5, maxLines: 10, decoration: const InputDecoration(labelText: 'Anotação'))])),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
-          FilledButton(onPressed: () async {
-            if (title.text.trim().isEmpty) return;
-            await state.saveNote(AcademicNote(subjectId: session.subjectId, sessionId: session.id, title: title.text.trim(), content: content.text.trim(), createdAt: DateTime.now()));
-            if (dialogContext.mounted) Navigator.pop(dialogContext);
-          }, child: const Text('Salvar')),
-        ],
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setLocal) => PopScope(
+          canPop: !saving,
+          child: AlertDialog(
+            title: Text(editing ? 'Editar anotação da aula' : 'Anotação da aula'),
+            content: SizedBox(
+              width: 540,
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(enabled: !saving, controller: title, textInputAction: TextInputAction.next, decoration: const InputDecoration(labelText: 'Título')),
+                  const SizedBox(height: 12),
+                  TextField(enabled: !saving, controller: content, minLines: 5, maxLines: 10, decoration: const InputDecoration(labelText: 'Anotação')),
+                  const SizedBox(height: 12),
+                  TextField(enabled: !saving, controller: tags, decoration: const InputDecoration(labelText: 'Tags', hintText: 'ex.: revisão, prova')),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Align(alignment: Alignment.centerLeft, child: Text(error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  ],
+                  if (saving) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(),
+                  ],
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+              FilledButton.icon(
+                onPressed: saving ? null : () async {
+                  if (title.text.trim().isEmpty) {
+                    setLocal(() => error = 'Informe um título.');
+                    return;
+                  }
+                  setLocal(() { saving = true; error = null; });
+                  try {
+                    await state.saveNote(AcademicNote(
+                      id: note?.id,
+                      subjectId: session.subjectId,
+                      sessionId: session.id,
+                      title: title.text.trim(),
+                      content: content.text.trim(),
+                      link: note?.link ?? '',
+                      tags: tags.text.trim(),
+                      pinned: note?.pinned ?? false,
+                      createdAt: note?.createdAt ?? DateTime.now(),
+                    ));
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  } catch (e) {
+                    if (dialogContext.mounted) setLocal(() { saving = false; error = 'Não foi possível salvar: $e'; });
+                  }
+                },
+                icon: saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined),
+                label: Text(saving ? 'Salvando…' : 'Salvar'),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   } finally {
     title.dispose();
     content.dispose();
+    tags.dispose();
   }
 }
 
