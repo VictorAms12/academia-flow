@@ -135,7 +135,7 @@ class _DesktopNav extends StatelessWidget {
             SizedBox(width: 11),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Academia Flow', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              Text('Academic OS • 2.6.1', style: TextStyle(fontSize: 10)),
+              Text('Organizador acadêmico', style: TextStyle(fontSize: 10)),
             ])),
           ]),
           const SizedBox(height: 28),
@@ -151,7 +151,7 @@ class _DesktopNav extends StatelessWidget {
               ),
             ),
           const Divider(height: 22),
-          _SecondaryNav(icon: Icons.search_rounded, label: 'Busca global', onTap: () => Navigator.push(context, motionRoute(const GlobalSearchScreen()))),
+          _SecondaryNav(icon: Icons.search_rounded, label: 'Busca avançada', onTap: () => Navigator.push(context, motionRoute(const GlobalSearchScreen()))),
           _SecondaryNav(icon: Icons.menu_book_rounded, label: 'Biblioteca', onTap: () => Navigator.push(context, motionRoute(const LibraryScreen()))),
           const Spacer(),
           if (state.semester.isNotEmpty)
@@ -251,25 +251,71 @@ class _TopBar extends StatelessWidget {
   const _TopBar({required this.desktop, required this.state});
   final bool desktop;
   final AppState state;
+
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: EdgeInsets.fromLTRB(desktop ? 26 : 17, 14, desktop ? 26 : 17, 7),
+  Widget build(BuildContext context) {
+    if (desktop) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(26, 14, 26, 7),
         child: Row(children: [
-          if (!desktop) ...[const _Logo(), const SizedBox(width: 9), const Text('Academia Flow', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16))] else const Spacer(),
-          if (!desktop) const Spacer(),
-          IconButton.filledTonal(tooltip: 'Busca global', onPressed: () => Navigator.push(context, motionRoute(const GlobalSearchScreen())), icon: const Icon(Icons.search_rounded)),
+          const Spacer(),
+          IconButton.filledTonal(tooltip: 'Busca avançada', onPressed: () => Navigator.push(context, motionRoute(const GlobalSearchScreen())), icon: const Icon(Icons.search_rounded)),
           const SizedBox(width: 6),
           IconButton.filledTonal(tooltip: 'Biblioteca', onPressed: () => Navigator.push(context, motionRoute(const LibraryScreen())), icon: const Icon(Icons.menu_book_outlined)),
           const SizedBox(width: 6),
           IconButton.filledTonal(
-            tooltip: 'Tema',
+            tooltip: 'Alternar tema',
             onPressed: state.toggleTheme,
-            icon: AnimatedSwitcher(duration: MotionSpec.normal, transitionBuilder: (child, animation) => RotationTransition(turns: Tween<double>(begin: -.18, end: 0).animate(animation), child: FadeTransition(opacity: animation, child: child)), child: Icon(state.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, key: ValueKey(state.isDark))),
+            icon: AnimatedSwitcher(
+              duration: MotionSpec.normal,
+              transitionBuilder: (child, animation) => RotationTransition(turns: Tween<double>(begin: -.18, end: 0).animate(animation), child: FadeTransition(opacity: animation, child: child)),
+              child: Icon(state.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, key: ValueKey(state.isDark)),
+            ),
           ),
           const SizedBox(width: 6),
           IconButton.filledTonal(tooltip: 'Configurações', onPressed: () => Navigator.push(context, motionRoute(const SettingsScreen())), icon: const Icon(Icons.settings_outlined)),
         ]),
       );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(17, 12, 10, 6),
+      child: Row(
+        children: [
+          const _Logo(),
+          const SizedBox(width: 9),
+          const Expanded(
+            child: Text(
+              'Academia Flow',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: 'Busca avançada',
+            onPressed: () => Navigator.push(context, motionRoute(const GlobalSearchScreen())),
+            icon: const Icon(Icons.search_rounded),
+          ),
+          const SizedBox(width: 4),
+          PopupMenuButton<String>(
+            tooltip: 'Mais opções',
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (value) {
+              if (value == 'library') Navigator.push(context, motionRoute(const LibraryScreen()));
+              if (value == 'theme') state.toggleTheme();
+              if (value == 'settings') Navigator.push(context, motionRoute(const SettingsScreen()));
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'library', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.menu_book_outlined), title: Text('Biblioteca'))),
+              PopupMenuItem(value: 'theme', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(state.isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded), title: Text(state.isDark ? 'Tema claro' : 'Tema escuro'))),
+              const PopupMenuItem(value: 'settings', child: ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.settings_outlined), title: Text('Configurações'))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Logo extends StatelessWidget {
