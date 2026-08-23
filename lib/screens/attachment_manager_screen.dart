@@ -12,21 +12,11 @@ Future<void> showAttachmentManager(
   required AttachmentTarget target,
   required String title,
 }) async {
-  await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => AttachmentManagerScreen(target: target, title: title),
-    ),
-  );
+  await Navigator.push(context, MaterialPageRoute(builder: (_) => AttachmentManagerScreen(target: target, title: title)));
 }
 
 class AttachmentManagerScreen extends StatefulWidget {
-  const AttachmentManagerScreen({
-    super.key,
-    required this.target,
-    required this.title,
-  });
-
+  const AttachmentManagerScreen({super.key, required this.target, required this.title});
   final AttachmentTarget target;
   final String title;
 
@@ -69,19 +59,18 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
     if (importing) return;
     setState(() => importing = true);
     try {
+      var added = 0;
       if (action == 'camera') {
-        await repository.takePhoto(target: widget.target);
+        if (await repository.takePhoto(target: widget.target) != null) added = 1;
       } else if (action == 'gallery') {
-        await repository.pickImages(target: widget.target);
+        added = (await repository.pickImages(target: widget.target)).length;
       } else {
-        await repository.pickFiles(target: widget.target);
+        added = (await repository.pickFiles(target: widget.target)).length;
       }
       await _reload();
+      if (mounted && added > 0) _snack('$added anexo${added == 1 ? '' : 's'} adicionado${added == 1 ? '' : 's'}.');
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Não foi possível adicionar o anexo. $e')),
-      );
+      if (mounted) _snack('Não foi possível adicionar o anexo. $e');
     } finally {
       if (mounted) setState(() => importing = false);
     }
@@ -90,29 +79,21 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Anexos'),
-        actions: [
-          _AddAttachmentButton(onSelected: _add, enabled: !importing),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Anexos')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 900),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
-                child: PageHeader(
-                  title: widget.title,
-                  subtitle: '${attachmentTargetLabel(widget.target.type)} • arquivos guardados dentro do Academia Flow',
-                ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
+              child: PageHeader(
+                title: widget.title,
+                subtitle: '${attachmentTargetLabel(widget.target.type)} • arquivos guardados dentro do Academia Flow',
               ),
-              if (importing) const LinearProgressIndicator(minHeight: 3),
-              Expanded(child: _body()),
-            ],
-          ),
+            ),
+            if (importing) const LinearProgressIndicator(minHeight: 3),
+            Expanded(child: _body()),
+          ]),
         ),
       ),
       floatingActionButton: PopupMenuButton<String>(
@@ -120,7 +101,7 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
         onSelected: _add,
         itemBuilder: (_) => _addItems(),
         child: FloatingActionButton.extended(
-          heroTag: 'attachment-add',
+          heroTag: 'attachment-add-${widget.target.type.name}-${widget.target.id}',
           onPressed: null,
           icon: importing
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -137,16 +118,13 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(30),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded, size: 48),
-              const SizedBox(height: 12),
-              Text(error!, textAlign: TextAlign.center),
-              const SizedBox(height: 14),
-              FilledButton.icon(onPressed: _reload, icon: const Icon(Icons.refresh_rounded), label: const Text('Tentar novamente')),
-            ],
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.error_outline_rounded, size: 48),
+            const SizedBox(height: 12),
+            Text(error!, textAlign: TextAlign.center),
+            const SizedBox(height: 14),
+            FilledButton.icon(onPressed: _reload, icon: const Icon(Icons.refresh_rounded), label: const Text('Tentar novamente')),
+          ]),
         ),
       );
     }
@@ -154,20 +132,23 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
       return EmptyState(
         icon: Icons.attach_file_rounded,
         title: 'Nenhum anexo',
-        message: 'Adicione fotos, PDFs, documentos ou outros arquivos relacionados a este item.',
-        actionLabel: 'Adicionar arquivo',
+        message: 'Adicione uma foto, imagem, PDF, documento ou outro arquivo relacionado a este item.',
+        actionLabel: 'Selecionar arquivo',
         onAction: () => _add('file'),
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 100),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, index) => _AttachmentCard(
-        item: items[index],
-        onOpen: () => _open(items[index]),
-        onRename: () => _rename(items[index]),
-        onDelete: () => _delete(items[index]),
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 100),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (_, index) => _AttachmentCard(
+          item: items[index],
+          onOpen: () => _open(items[index]),
+          onRename: () => _rename(items[index]),
+          onDelete: () => _delete(items[index]),
+        ),
       ),
     );
   }
@@ -182,36 +163,25 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
           context: context,
           builder: (dialogContext) => Dialog(
             insetPadding: const EdgeInsets.all(16),
-            child: Stack(
-              children: [
-                Container(
-                  constraints: const BoxConstraints(maxWidth: 1100, maxHeight: 850),
-                  color: Colors.black,
-                  child: InteractiveViewer(
-                    minScale: .5,
-                    maxScale: 5,
-                    child: Center(child: Image.file(file, fit: BoxFit.contain)),
-                  ),
-                ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton.filled(
-                    tooltip: 'Fechar',
-                    onPressed: () => Navigator.pop(dialogContext),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ),
-              ],
-            ),
+            child: Stack(children: [
+              Container(
+                constraints: const BoxConstraints(maxWidth: 1100, maxHeight: 850),
+                color: Colors.black,
+                child: InteractiveViewer(minScale: .5, maxScale: 5, child: Center(child: Image.file(file, fit: BoxFit.contain))),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton.filled(tooltip: 'Fechar', onPressed: () => Navigator.pop(dialogContext), icon: const Icon(Icons.close_rounded)),
+              ),
+            ]),
           ),
         );
       } else {
         await repository.openExternally(item);
       }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Não foi possível abrir o arquivo. $e')));
+      if (mounted) _snack('Não foi possível abrir o arquivo. $e');
     }
   }
 
@@ -222,12 +192,7 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Renomear anexo'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Nome'),
-            onSubmitted: (value) => Navigator.pop(dialogContext, value),
-          ),
+          content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Nome'), onSubmitted: (value) => Navigator.pop(dialogContext, value)),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
             FilledButton(onPressed: () => Navigator.pop(dialogContext, controller.text), child: const Text('Salvar')),
@@ -237,6 +202,7 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
       if (value == null || value.trim().isEmpty) return;
       await repository.rename(item, value);
       await _reload();
+      if (mounted) _snack('Anexo renomeado.');
     } finally {
       controller.dispose();
     }
@@ -247,7 +213,7 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Excluir anexo?'),
-            content: Text('“${item.title}” será removido do Academia Flow e o arquivo interno será apagado.'),
+            content: Text('“${item.title}” será removido e o arquivo interno será apagado.'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
               FilledButton(
@@ -262,53 +228,41 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
     if (!confirmed) return;
     await repository.delete(item);
     await _reload();
+    if (mounted) _snack('Anexo excluído.');
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
   }
 }
 
 class _AttachmentCard extends StatelessWidget {
-  const _AttachmentCard({
-    required this.item,
-    required this.onOpen,
-    required this.onRename,
-    required this.onDelete,
-  });
-
+  const _AttachmentCard({required this.item, required this.onOpen, required this.onRename, required this.onDelete});
   final AcademicAttachment item;
   final VoidCallback onOpen;
   final VoidCallback onRename;
   final VoidCallback onDelete;
 
   @override
-  Widget build(BuildContext context) {
-    return SoftCard(
-      onTap: onOpen,
-      child: Row(
-        children: [
+  Widget build(BuildContext context) => SoftCard(
+        onTap: onOpen,
+        child: Row(children: [
           Container(
             width: 48,
             height: 48,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.gold.withValues(alpha: .10),
-              borderRadius: BorderRadius.circular(13),
-            ),
+            decoration: BoxDecoration(color: AppColors.gold.withValues(alpha: .10), borderRadius: BorderRadius.circular(13)),
             child: Icon(_kindIcon(item.kind), color: AppColors.gold),
           ),
           const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 3),
-                Text(
-                  '${attachmentKindLabel(item.kind)} • ${_formatBytes(item.sizeBytes)} • ${_formatDate(item.createdAt)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                Text(item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall),
-              ],
-            ),
-          ),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900)),
+            const SizedBox(height: 3),
+            Text('${attachmentKindLabel(item.kind)} • ${_formatBytes(item.sizeBytes)} • ${_formatDate(item.createdAt)}', style: Theme.of(context).textTheme.bodySmall),
+            Text(item.fileName, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall),
+          ])),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'open') onOpen();
@@ -322,42 +276,15 @@ class _AttachmentCard extends StatelessWidget {
               PopupMenuItem(value: 'delete', child: Text('Excluir')),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AddAttachmentButton extends StatelessWidget {
-  const _AddAttachmentButton({required this.onSelected, required this.enabled});
-
-  final ValueChanged<String> onSelected;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) => PopupMenuButton<String>(
-        enabled: enabled,
-        tooltip: 'Adicionar anexo',
-        onSelected: onSelected,
-        icon: const Icon(Icons.add_rounded),
-        itemBuilder: (_) => _addItems(),
+        ]),
       );
 }
 
 List<PopupMenuEntry<String>> _addItems() => [
       if (Platform.isAndroid || Platform.isIOS)
-        const PopupMenuItem(
-          value: 'camera',
-          child: ListTile(leading: Icon(Icons.photo_camera_outlined), title: Text('Tirar foto'), contentPadding: EdgeInsets.zero),
-        ),
-      const PopupMenuItem(
-        value: 'gallery',
-        child: ListTile(leading: Icon(Icons.photo_library_outlined), title: Text('Escolher imagens'), contentPadding: EdgeInsets.zero),
-      ),
-      const PopupMenuItem(
-        value: 'file',
-        child: ListTile(leading: Icon(Icons.attach_file_rounded), title: Text('Selecionar arquivo'), contentPadding: EdgeInsets.zero),
-      ),
+        const PopupMenuItem(value: 'camera', child: ListTile(leading: Icon(Icons.photo_camera_outlined), title: Text('Tirar foto'), contentPadding: EdgeInsets.zero)),
+      const PopupMenuItem(value: 'gallery', child: ListTile(leading: Icon(Icons.photo_library_outlined), title: Text('Escolher imagens'), contentPadding: EdgeInsets.zero)),
+      const PopupMenuItem(value: 'file', child: ListTile(leading: Icon(Icons.attach_file_rounded), title: Text('Selecionar arquivo'), contentPadding: EdgeInsets.zero)),
     ];
 
 IconData _kindIcon(AttachmentKind kind) => switch (kind) {
