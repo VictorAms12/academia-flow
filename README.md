@@ -2,313 +2,296 @@
 
 # 🎓 Academia Flow
 
-### Seu espaço acadêmico offline-first para organizar aulas, tarefas, frequência, notas, estudos e materiais.
+### Organização acadêmica offline-first para transformar aulas, prazos, presença, notas e materiais em uma rotina clara.
 
 ![Flutter](https://img.shields.io/badge/Flutter-Stable-02569B?logo=flutter&logoColor=white)
 ![Dart](https://img.shields.io/badge/Dart-3.12%2B-0175C2?logo=dart&logoColor=white)
 ![Android](https://img.shields.io/badge/Android-Release-3DDC84?logo=android&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-x64-0078D4?logo=windows11&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-Offline--first-003B57?logo=sqlite&logoColor=white)
-![Version](https://img.shields.io/badge/versão-2.6.4-D4AF37)
+![Version](https://img.shields.io/badge/versão-2.6.5-D4AF37)
 
-**Offline-first • Android + Windows • Google Classroom opcional • Arquivos locais**
+**Offline-first • Android + Windows • Google Classroom opcional • Anexos locais • Backup completo**
 
 </div>
 
 ---
 
-## 📖 Sobre o projeto
+## 📖 Sobre
 
-**Academia Flow** é um organizador acadêmico desenvolvido em Flutter para concentrar a rotina universitária em um único aplicativo.
+**Academia Flow** é um organizador acadêmico desenvolvido em Flutter para concentrar a rotina de estudos em um único aplicativo. O foco é manter o uso cotidiano simples sem sacrificar profundidade: matérias, horários, sessões de aula, frequência, tarefas, notas, planejamento, biblioteca e arquivos trabalham sobre a mesma base acadêmica.
 
-O app foi pensado para funcionar primeiro no dispositivo: **matérias, aulas, tarefas, notas, frequência, anotações, materiais, planejamento e arquivos continuam disponíveis mesmo sem internet**. O SQLite local permanece como fonte principal dos dados acadêmicos.
+O aplicativo segue uma abordagem **offline-first**. O SQLite local é a fonte principal dos dados e os anexos são armazenados dentro da área privada do aplicativo. A internet é necessária apenas para recursos externos, como o Google Classroom.
 
-A integração com o **Google Classroom** é opcional e somente leitura, servindo para trazer turmas e atividades para dentro da rotina do Academia Flow sem transformar a nuvem em requisito para usar o aplicativo.
-
-> **Versão em desenvolvimento:** `2.6.4+23 — Anexos`
+> **Versão atual:** `2.6.5+24 — Polimento, Backup e Segurança`
 
 ---
 
-## ✨ O que o Academia Flow faz
+## ✨ Recursos
 
-| Área | Recursos |
+| Área | O que oferece |
 |---|---|
-| 🏠 **Hoje** | Aula atual, próxima aula, prioridades, carga acadêmica, presença pendente, avisos e ações rápidas |
-| 📚 **Matérias** | Professor, sala, frequência mínima, horários, atividades, notas, materiais e anotações |
-| ✅ **Atividades** | Kanban, calendário, prioridades, tipos, checklist, lembretes, vínculo com aula e foco por urgência |
-| 🧠 **Planejamento** | Blocos semanais de estudo, duração, matéria, objetivo e conclusão |
-| 🙋 **Presença** | Presente, falta, pendente, cancelada, histórico, meta, projeções e faltas restantes |
-| 📊 **Notas** | Médias ponderadas, desempenho por matéria, simulação e nota necessária na próxima avaliação |
-| 🗓️ **Rotina** | Grade semanal, sessões de aula, aulas extras, reposições, feriados, recessos e calendário acadêmico |
-| 📖 **Biblioteca** | Anotações, materiais, tags, fixados, filtros, organização e abertura de links |
-| 🔎 **Busca avançada** | Busca unificada por matérias, tarefas, notas, materiais, aulas e anexos |
-| 📎 **Anexos** | Fotos, PDFs e documentos vinculados a aulas, anotações, materiais e atividades |
-| ☁️ **Google Classroom** | Login opcional, turmas, vínculo com matérias e importação read-only de atividades |
-| 🎨 **Experiência** | Tema claro/escuro, layout responsivo, animações, feedback de ações e interface adaptativa |
+| 🏠 **Hoje** | Aula atual, próxima aula, prioridades, carga do dia, avisos, presença pendente e ações rápidas |
+| 📚 **Matérias** | Professor, sala, horários, frequência, notas, atividades, materiais e anotações |
+| ✅ **Atividades** | Kanban, calendário, prioridade, tipo, checklist, lembretes, anexos e ranking de urgência |
+| 🧠 **Planejamento** | Blocos de estudo por data, horário, duração, matéria, objetivo e conclusão |
+| 🙋 **Presença** | Histórico editável, meta, faltas restantes e projeção da próxima aula presente/ausente |
+| 📊 **Notas** | Média ponderada, desempenho e cálculo da nota necessária em uma próxima avaliação |
+| 🗓️ **Rotina** | Grade semanal, sessões, aulas extras, reposições e calendário acadêmico |
+| 📖 **Biblioteca** | Anotações, materiais, tags, fixados, filtros, ordenação e anexos |
+| 🔎 **Busca avançada** | Pesquisa unificada por matérias, atividades, anotações, materiais, aulas e arquivos |
+| 📎 **Anexos** | Câmera, galeria, PDFs e documentos vinculados ao contexto acadêmico |
+| 🛡️ **Backup** | Backup `.afbackup`, anexos, integridade SHA-256, restauração e cópias automáticas |
+| ☁️ **Classroom** | Login opcional, turmas, vínculos e importação read-only de atividades |
+| 🎨 **Experiência** | Light/Dark Mode, interface responsiva, animações e feedback de operações |
 
 ---
 
-## 🏠 Hoje
+## 🏠 Hoje: contexto antes de quantidade
 
-A tela **Hoje** funciona como o centro da rotina diária.
-
-Ela reúne, em um mesmo lugar:
+A tela **Hoje** reúne as informações que normalmente exigiriam navegar por várias áreas:
 
 - aula acontecendo agora;
 - próxima aula;
-- presença ainda não registrada;
-- atividades de hoje;
-- atividades atrasadas;
-- avaliações próximas;
+- presença não respondida;
+- tarefas para hoje e atrasadas;
+- provas próximas;
 - risco de frequência;
-- carga acadêmica do dia;
+- carga acadêmica diária;
 - blocos de estudo;
-- avisos importantes;
-- atalhos para registrar informações sem navegar por várias telas.
+- avisos relevantes;
+- atalhos para registrar conteúdo rapidamente.
 
-A ideia é que o usuário consiga abrir o app e responder rapidamente à pergunta: **“o que eu preciso fazer agora?”**
+A ideia é responder rapidamente: **“o que merece minha atenção agora?”**
 
 ---
 
 ## 🙋 Presença e frequência
 
-Cada horário recorrente gera sessões individuais de aula. Assim, a grade planejada fica separada do que realmente aconteceu.
+Cada horário recorrente gera sessões individuais. Isso separa a **grade planejada** do que realmente aconteceu.
 
 ```mermaid
 flowchart TD
     A[Horário recorrente] --> B[Sessão de aula]
-    B --> C[Lembrete]
-    C --> D[Aula iniciada]
-    D --> E{Registro}
-    E -->|Presente| F[Presença]
-    E -->|Faltei| G[Falta]
-    E -->|Cancelada| H[Cancelamento]
-    E -->|Sem resposta| I[Pendente]
+    B --> C[Aula iniciada]
+    C --> D{Registro}
+    D -->|Presente| E[Presença]
+    D -->|Faltei| F[Falta]
+    D -->|Cancelada| G[Cancelamento]
+    D -->|Sem resposta| H[Pendente]
+    E --> I[Atualiza frequência]
+    F --> I
 ```
 
-O sistema considera a quantidade real de aulas por bloco (`classCount`) e oferece:
+O cálculo respeita `classCount`, portanto um bloco equivalente a duas aulas impacta a projeção como duas aulas.
 
-- meta global ou específica por matéria;
-- histórico de presença;
-- edição posterior;
-- observação/motivo de falta;
-- desfazer ações recentes;
-- faltas restantes;
-- projeção até o fim do período;
-- simulação de **presença na próxima aula**;
-- simulação de **falta na próxima aula**;
-- impacto calculado usando a quantidade real de aulas do próximo bloco.
+A tela de presença mostra:
 
-A presença ou falta só fica disponível depois que a aula começa. Cancelamentos futuros continuam permitidos.
+- frequência atual;
+- meta global ou específica da matéria;
+- faltas contabilizadas e restantes;
+- histórico editável;
+- observações;
+- projeção **se estiver presente na próxima aula**;
+- projeção **se faltar na próxima aula**;
+- situação em relação à meta.
 
 ---
 
-## ✅ Atividades e foco
+## ✅ Atividades e planejamento
 
-As atividades podem ser organizadas por status, prioridade, tipo e prazo.
+Atividades podem representar trabalho, prova, seminário, projeto, leitura ou outro prazo.
 
-Recursos disponíveis:
+Recursos:
 
-- Kanban;
-- calendário mensal;
+- Kanban e calendário;
+- prioridades;
 - checklist;
-- atividade, prova, seminário, projeto, leitura e outros tipos;
-- prioridade alta, média ou baixa;
+- lembretes;
 - vínculo com matéria e aula;
-- lembretes locais;
-- duplicar atividade;
+- anexos;
+- duplicação;
 - adiar prazo;
-- concluir rapidamente;
-- desfazer ações recentes;
-- ranking automático de urgência no **Foco de Atividades**.
+- concluir/reabrir;
+- ações com feedback e desfazer onde aplicável;
+- **Foco de Atividades**, com ordenação por urgência.
 
-O ranking considera prazo, atraso, prioridade, tipo e estado da atividade para destacar o que merece atenção primeiro.
-
----
-
-## 🧠 Planejador semanal
-
-Além de tarefas com prazo, o Academia Flow permite criar **blocos de estudo**.
-
-Um bloco pode representar, por exemplo:
-
-```text
-Terça-feira • 14:30
-Banco de Dados
-Revisar normalização
-Duração: 1h30
-```
-
-Os blocos podem ser vinculados a uma matéria, possuem duração estimada e podem ser marcados como concluídos.
-
-Isso permite separar **o que precisa ser entregue** do **tempo reservado para estudar**.
+O planejador semanal complementa os prazos com **blocos de estudo**, permitindo reservar tempo para uma matéria antes que ela vire uma urgência.
 
 ---
 
 ## 📊 Notas e desempenho
 
-O Academia Flow calcula e acompanha:
+O Academia Flow acompanha:
 
 - notas por matéria;
-- peso de cada avaliação;
+- peso das avaliações;
 - média ponderada;
-- média acadêmica por disciplina;
-- comparação com a média mínima configurada;
-- simulação de próximas avaliações;
-- cálculo automático de **quanto é necessário tirar na próxima prova**;
-- frequência e desempenho apresentados em conjunto.
+- média mínima configurável;
+- risco acadêmico;
+- nota necessária na próxima avaliação;
+- frequência e desempenho no mesmo contexto.
 
 ---
 
-## 📖 Biblioteca acadêmica
+## 📖 Biblioteca
 
-A Biblioteca centraliza conteúdo de estudo e referência.
+A Biblioteca possui três áreas:
 
-### Anotações
+### 📝 Anotações
 
 - título e conteúdo;
-- matéria relacionada;
-- vínculo opcional com uma aula;
+- matéria e aula vinculadas;
 - tags;
 - fixar/desafixar;
 - links;
-- busca por conteúdo;
-- filtros por matéria e tag;
-- ordenação por data, título ou matéria.
+- busca textual;
+- filtros e ordenação.
 
-### Materiais
+### 📚 Materiais
 
+- PDF, slides, vídeo, documento, repositório, link e outros tipos;
+- descrição;
+- matéria relacionada;
+- URL externa;
+- anexos próprios.
+
+### 📎 Anexos
+
+- fotos da câmera;
+- imagens da galeria;
 - PDF;
-- slides;
-- vídeo;
-- documento;
-- repositório;
-- link;
-- outros tipos de referência;
-- descrição e matéria relacionada;
-- abertura direta de URLs.
+- documentos;
+- arquivos selecionados no dispositivo;
+- vínculo com aula, anotação, material ou atividade.
 
-### Anexos
-
-A partir da versão 2.6.4, o Academia Flow também passa a armazenar **arquivos reais**, não apenas referências.
-
-Os anexos podem ser vinculados a:
-
-- aulas;
-- anotações;
-- materiais;
-- atividades.
-
-É possível adicionar:
-
-- 📷 foto pela câmera;
-- 🖼️ imagem da galeria;
-- 📄 PDF;
-- 📝 documento;
-- 📦 outros arquivos selecionados no dispositivo.
-
-Os arquivos são copiados para a área interna do Academia Flow para não dependerem do caminho original do arquivo selecionado.
+Filtros específicos são isolados por aba para não permanecerem ativos de forma invisível ao trocar de contexto.
 
 ---
 
-## 📎 Como os anexos são armazenados
+## 📎 Armazenamento de anexos
 
-Arquivos binários **não são gravados dentro do SQLite**.
+Arquivos binários não são colocados dentro do SQLite.
 
 ```mermaid
 flowchart LR
-    PICKER[Câmera / Galeria / Arquivo] --> STORE[Armazenamento interno]
-    STORE --> FILE[Arquivo físico]
-    STORE --> META[Metadados]
+    INPUT[Câmera / Galeria / Arquivo] --> COPY[Cópia interna]
+    COPY --> FILE[Arquivo físico]
+    COPY --> META[Metadados]
     META --> DB[(SQLite)]
-    DB --> LINK[Vínculo acadêmico]
-    LINK --> CLASS[Aula]
-    LINK --> NOTE[Anotação]
-    LINK --> MATERIAL[Material]
-    LINK --> TASK[Atividade]
+    DB --> CLASS[Aula]
+    DB --> NOTE[Anotação]
+    DB --> MATERIAL[Material]
+    DB --> TASK[Atividade]
 ```
 
-O banco guarda apenas informações como:
+O banco guarda título, nome original, tipo, tamanho, data, matéria, vínculo acadêmico e caminho interno. Arquivos órfãos são limpos em segundo plano na inicialização.
 
-```text
-Título
-Nome original
-Tipo
-Tamanho
-Data
-Matéria
-Vínculo acadêmico
-Caminho interno
-```
+---
 
-Isso evita inflar o banco e mantém o acesso aos arquivos mais eficiente.
+## ⚡ Conteúdo da aula
+
+A tela de uma aula funciona como um pequeno hub contextual.
+
+A partir dela é possível:
+
+- registrar presença/falta/cancelamento;
+- criar e editar anotações;
+- excluir uma nota rápida sem ir até a Biblioteca;
+- adicionar material;
+- criar atividade;
+- anexar foto ou documento;
+- gerenciar anexos dos conteúdos vinculados;
+- criar reposição quando uma aula regular for cancelada.
 
 ---
 
 ## 🔎 Busca avançada
 
-A busca global usa normalização e ranking por relevância.
-
-Ela procura em:
+A pesquisa usa múltiplos termos, normalização de texto e ranking por relevância.
 
 | Categoria | Campos pesquisados |
 |---|---|
-| **Matérias** | nome, professor, sala |
+| **Matérias** | nome, professor e sala |
 | **Atividades** | título, descrição, checklist, matéria, tipo, status e prioridade |
 | **Anotações** | título, conteúdo, tags, links e matéria |
 | **Materiais** | título, descrição, URL, tipo e matéria |
 | **Aulas** | matéria, data, horário, sala, observação e situação |
 | **Anexos** | título, nome do arquivo, tipo, matéria e vínculo |
 
-A normalização ignora diferenças de acentuação. Por exemplo:
-
-```text
-logica programacao
-```
-
-pode localizar conteúdo escrito como:
-
-```text
-Lógica de Programação
-```
-
-Também é possível restringir os resultados por categoria e matéria.
+`logica programacao`, por exemplo, pode localizar **Lógica de Programação**.
 
 ---
 
-## ⚡ Nota rápida durante a aula
+## 🛡️ Backup e Segurança
 
-Quando uma aula está acontecendo, uma anotação pode ser criada diretamente naquele contexto.
+A versão 2.6.5 introduz backups completos no formato **`.afbackup`**.
 
-Ela já fica vinculada automaticamente a:
+Um backup pode incluir:
 
 ```text
-Matéria → Aula → Data
+perfil e preferências
+matérias
+horários
+sessões de aula
+presenças
+tarefas e checklists
+notas
+calendário acadêmico
+anotações
+materiais
+planejamento semanal
+anexos físicos
 ```
 
-Depois pode ser encontrada novamente nos detalhes da aula ou na Biblioteca.
+### Integridade
+
+Cada backup contém um manifesto com:
+
+- versão do formato;
+- versão do aplicativo;
+- data de criação;
+- contagens dos registros;
+- SHA-256 do arquivo lógico de dados;
+- SHA-256 individual de cada anexo.
+
+Antes da restauração, o arquivo é validado. A restauração usa staging para anexos e transação no banco, reduzindo o risco de estado parcialmente restaurado.
+
+> SHA-256 detecta alterações/corrupção, mas o `.afbackup` **não é criptografado nem assinado digitalmente**. Guarde backups exportados em um local confiável.
+
+### Tipos de backup
+
+- **Manual:** criado pelo usuário;
+- **Automático:** opcional, executado em segundo plano conforme o intervalo configurado;
+- **Segurança:** criado automaticamente antes de restauração ou exclusões em massa.
+
+Retenção interna atual:
+
+- até 3 backups manuais;
+- até 5 automáticos;
+- até 3 de segurança.
+
+Backups internos pertencem aos dados do próprio aplicativo. Para proteção contra perda, desinstalação ou limpeza de dados, use **Criar e exportar** e mantenha uma cópia fora do app.
+
+### Google
+
+Tokens, credenciais OAuth e sessão Google **não são incluídos**. Após restaurar em outro dispositivo, basta conectar a conta novamente.
 
 ---
 
 ## ☁️ Google Classroom
 
-A integração Google é **opcional e read-only**.
-
-Atualmente oferece:
+A integração é opcional e read-only.
 
 - login Google;
-- Android e Windows;
 - listagem de turmas ativas;
-- vínculo entre turma do Classroom e matéria local;
-- importação de atividades;
-- atualização de título, prazo, tipo e estado de entrega;
-- preservação de descrições e checklists criados localmente;
-- tarefas entregues podem ser refletidas como concluídas localmente;
-- desvincular uma turma não apaga as atividades locais.
+- vínculo turma ↔ matéria local;
+- importação de atividades com prazo;
+- atualização de título, prazo e estado de entrega;
+- preservação de conteúdo editado localmente;
+- desvincular uma turma não apaga as tarefas locais.
 
-O aplicativo continua funcionando normalmente sem uma conta Google conectada.
-
-A configuração OAuth está documentada em `docs/GOOGLE_SETUP.md`.
+Consulte `docs/GOOGLE_SETUP.md` para configuração OAuth.
 
 ---
 
@@ -316,26 +299,20 @@ A configuração OAuth está documentada em `docs/GOOGLE_SETUP.md`.
 
 ```mermaid
 flowchart LR
-    UI[Flutter UI] --> STATE[AppState e controladores]
-    STATE --> DB[(SQLite local)]
-    STATE --> NOTIF[Notificações]
+    UI[Flutter UI] --> STATE[AppState / controladores]
+    STATE --> DB[(SQLite)]
     STATE --> FILES[Arquivos locais]
+    STATE --> NOTIF[Notificações]
     STATE --> GOOGLE[Google opcional]
+
+    DB --> ACADEMIC[Dados acadêmicos]
+    DB --> META[Metadados dos anexos]
+    FILES --> ATTACH[Anexos]
+    FILES --> BACKUP[Backups]
     GOOGLE --> CLASSROOM[Classroom API]
-
-    DB --> SUBJECTS[Matérias]
-    DB --> TASKS[Atividades]
-    DB --> CLASSES[Aulas e presença]
-    DB --> GRADES[Notas]
-    DB --> NOTES[Notas e materiais]
-    DB --> ATTACH[Metadados de anexos]
-
-    FILES --> PHOTOS[Fotos]
-    FILES --> PDF[PDFs]
-    FILES --> DOCS[Documentos]
 ```
 
-O projeto segue uma abordagem **offline-first**: a interface grava e consulta o estado local primeiro. Integrações externas são complementares.
+A nuvem complementa o aplicativo; ela não é a fonte obrigatória da rotina acadêmica.
 
 ---
 
@@ -344,36 +321,32 @@ O projeto segue uma abordagem **offline-first**: a interface grava e consulta o 
 | Tecnologia | Uso |
 |---|---|
 | **Flutter / Dart** | Interface e regras multiplataforma |
-| **SQLite / sqflite** | Persistência acadêmica Android |
+| **SQLite / sqflite** | Persistência Android |
 | **sqflite_common_ffi** | Persistência Windows |
-| **path_provider** | Diretórios privados para anexos |
+| **path_provider** | Armazenamento privado |
 | **image_picker** | Câmera e galeria |
-| **file_picker** | Seleção de documentos e arquivos |
-| **open_filex** | Abertura de arquivos anexados |
-| **flutter_local_notifications** | Lembretes e rotina Android |
-| **timezone** | Agendamento local |
-| **google_sign_in** | Autenticação Google Android |
-| **HTTP + OAuth** | Google Classroom e autenticação desktop |
-| **flutter_secure_storage** | Tokens e sessão Google |
+| **file_picker** | Arquivos, importação e exportação |
+| **open_filex** | Abertura de documentos |
+| **archive** | Container ZIP do `.afbackup` |
+| **crypto** | SHA-256 de integridade |
+| **flutter_local_notifications** | Lembretes e rotina |
+| **google_sign_in + HTTP** | Google e Classroom |
+| **flutter_secure_storage** | Sessão/token Google |
 | **GitHub Actions** | Analyzer, testes e builds Release |
 
 SDK Dart mínimo: **3.12.0**.
 
 ---
 
-## 📁 Estrutura do projeto
+## 📁 Estrutura
 
 ```text
 academia-flow/
-├── .github/
-│   └── workflows/
-│       ├── build-android.yml
-│       └── build-windows.yml
+├── .github/workflows/
 ├── docs/
 ├── lib/
 │   ├── data/
-│   ├── integrations/
-│   │   └── google/
+│   ├── integrations/google/
 │   ├── models/
 │   ├── screens/
 │   ├── services/
@@ -391,28 +364,14 @@ academia-flow/
 
 ## 🚀 Desenvolvimento local
 
-### Requisitos
-
-- Flutter Stable;
-- Dart compatível com o projeto;
-- Android SDK para Android;
-- Visual Studio com **Desktop development with C++** para Windows.
-
-Clone o projeto:
-
 ```bash
 git clone https://github.com/VictorAms12/academia-flow.git
 cd academia-flow
 flutter pub get
-```
-
-### Android
-
-```bash
 flutter run
 ```
 
-### Windows
+Windows:
 
 ```bash
 flutter config --enable-windows-desktop
@@ -423,155 +382,77 @@ flutter run -d windows
 
 ## 📦 Builds oficiais
 
-Os builds oficiais são realizados pelo **GitHub Actions** para preservar configurações importantes como assinatura Android, recursos do launcher, notificações e OAuth.
+Os workflows do GitHub Actions preservam as configurações de release e executam validações antes de disponibilizar artifacts.
 
-### 🤖 Android
-
-Workflow: **Build Android APK**
+### Android
 
 ```text
 Checkout
-   ↓
-Java 17 + Flutter Stable
-   ↓
-Geração da plataforma Android
-   ↓
-Restauração da assinatura persistente
-   ↓
-Configuração Android + Google
-   ↓
-Validação dos recursos
-   ↓
-flutter analyze
-   ↓
-flutter test
-   ↓
-flutter build apk --release
-   ↓
-Artifact APK
+→ Java 17 + Flutter Stable
+→ configuração Android
+→ assinatura persistente
+→ launcher / notificações / Google
+→ flutter analyze
+→ flutter test
+→ flutter build apk --release
+→ artifact APK
 ```
 
-A mesma identidade de assinatura deve ser mantida entre releases para que uma APK nova possa ser instalada **por cima da versão anterior sem apagar os dados**.
-
-### 🪟 Windows
-
-Workflow: **Build Windows Desktop**
+### Windows
 
 ```text
 Checkout
-   ↓
-Flutter Stable
-   ↓
-Geração da plataforma Windows
-   ↓
-Branding desktop
-   ↓
-flutter analyze
-   ↓
-flutter test
-   ↓
-flutter build windows --release
-   ↓
-Pacote portátil ZIP
+→ Flutter Stable
+→ configuração desktop
+→ flutter analyze
+→ flutter test
+→ flutter build windows --release
+→ pacote portátil
 ```
+
+A assinatura Android é mantida entre releases para permitir atualização por cima de uma instalação anterior sem apagar os dados.
 
 ---
 
 ## 🧪 Qualidade
 
-Antes das releases, a CI executa análise estática e a suíte de testes.
+A suíte cobre regras acadêmicas, resiliência de modelos, busca, Google, planejamento e estruturas do backup. A CI exige analyzer e testes antes do build Release.
 
-Entre os comportamentos cobertos estão:
+A versão 2.6.5 também passou por um passe de consistência focado em:
 
-- modelos e dados legados inválidos;
-- checklist de atividades;
-- média de frequência;
-- resumo semanal sem contar aulas futuras;
-- limites de navegação;
-- integração Google/Classroom;
-- normalização e ranking da busca avançada;
-- serialização do planejador semanal;
-- priorização de atividades;
-- classificação de tipos de anexos;
-- reconstrução dos vínculos dos anexos.
-
-Comandos principais:
-
-```bash
-flutter analyze
-flutter test
-flutter build apk --release
-```
+- menos ações duplicadas;
+- feedback de operações demoradas;
+- layout responsivo em formulários;
+- filtros previsíveis;
+- navegação mobile mais compacta;
+- exclusões destrutivas protegidas por backup;
+- manutenção de arquivos órfãos;
+- nomes de recursos sem sufixos de versão na interface.
 
 ---
 
-## 🔐 Dados e privacidade
+## 🔐 Privacidade
 
-O **SQLite local** continua sendo a fonte principal dos dados acadêmicos.
+Os dados acadêmicos permanecem localmente. A conta Google é opcional. O Classroom é usado somente quando conectado pelo usuário.
 
-A conta Google não é obrigatória. Quando conectada, a integração Classroom utiliza apenas os dados necessários para exibir turmas e atividades autorizadas pelo usuário.
-
-Os anexos ficam armazenados localmente na área de documentos do aplicativo.
-
-> Remover os dados do aplicativo pode eliminar banco e anexos locais. Um sistema completo de backup/restauração ainda faz parte do roadmap.
+Backups exportados podem conter informações acadêmicas e arquivos pessoais anexados. Como o formato atual não é criptografado, o usuário deve controlar onde essas cópias são armazenadas.
 
 ---
 
 ## ⚠️ Limitações atuais
 
-- sincronização Android ↔ Windows ainda não está disponível;
-- backup completo com anexos ainda não está implementado;
-- Google Classroom permanece somente leitura;
-- os anexos são locais e ainda não são sincronizados em nuvem;
-- notificações avançadas continuam concentradas no Android;
-- a versão Windows portátil possui limitações para notificações nativas do sistema.
+- sem sincronização automática Android ↔ Windows;
+- sem backup em nuvem próprio;
+- `.afbackup` ainda não possui criptografia por senha;
+- Google Classroom é read-only;
+- recursos de notificações são mais completos no Android;
+- backup automático local é executado quando o app é inicializado e o intervalo já venceu.
 
 ---
 
-## 🛣️ Roadmap
+## 🛣️ Próximos passos
 
-### Próximas evoluções
-
-- [ ] backup e restauração incluindo anexos;
-- [ ] anexos também diretamente no nível da matéria;
-- [ ] compartilhamento/exportação de arquivos;
-- [ ] sincronização incremental do Classroom;
-- [ ] relatórios acadêmicos mais completos;
-- [ ] inteligência de planejamento e carga semanal;
-- [ ] sincronização opcional entre dispositivos;
-- [ ] aprimoramentos contínuos de desempenho e acessibilidade.
-
-### Ideias futuras
-
-- [ ] widgets Android;
-- [ ] exportação de semestre;
-- [ ] histórico acadêmico por períodos;
-- [ ] central de revisão e estudos;
-- [ ] versão web complementar.
-
----
-
-## 🧭 Filosofia do Academia Flow
-
-O projeto busca evitar que a organização acadêmica vire apenas uma lista de tarefas.
-
-A proposta é conectar:
-
-```mermaid
-flowchart LR
-    CLASSES[Aulas] --> NOTES[Anotações]
-    CLASSES --> ATTENDANCE[Presença]
-    CLASSES --> MATERIALS[Materiais]
-    CLASSES --> TASKS[Atividades]
-    TASKS --> PLAN[Planejamento]
-    GRADES[Notas] --> PERFORMANCE[Desempenho]
-    ATTENDANCE --> PERFORMANCE
-    PLAN --> TODAY[Hoje]
-    PERFORMANCE --> TODAY
-    TASKS --> TODAY
-```
-
-Assim, a rotina, os conteúdos e o desempenho deixam de existir como áreas isoladas.
+Depois da estabilização da 2.6.5, a próxima linha pode evoluir para um **Semestre Inteligente**, com calendário acadêmico mais completo, distribuição de avaliações, planejamento de carga e projeções de desempenho ao longo do período.
 
 ---
 
@@ -585,8 +466,6 @@ GitHub: [@VictorAms12](https://github.com/VictorAms12)
 
 <div align="center">
 
-### 🎓 Academia Flow
-
-**Organização acadêmica que acompanha a rotina, não apenas os prazos.**
+**Academia Flow** — organização acadêmica que acompanha a rotina, não apenas os prazos.
 
 </div>
