@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'app.dart';
+import 'services/backup_service.dart';
 import 'state/app_state.dart';
 
 Future<void> main() async {
@@ -29,6 +31,7 @@ class _AcademiaFlowStartup extends StatefulWidget {
 
 class _AcademiaFlowStartupState extends State<_AcademiaFlowStartup> {
   late Future<void> _initialization;
+  int _initializationGeneration = 0;
 
   @override
   void initState() {
@@ -37,11 +40,23 @@ class _AcademiaFlowStartupState extends State<_AcademiaFlowStartup> {
   }
 
   void _startInitialization() {
-    _initialization = widget.state.initialize().timeout(
+    final generation = ++_initializationGeneration;
+    final future = widget.state.initialize().timeout(
       const Duration(seconds: 20),
       onTimeout: () => throw Exception(
         'A inicialização ultrapassou 20 segundos. Verifique acesso ao banco local e tente novamente.',
       ),
+    );
+    _initialization = future;
+    unawaited(
+      future.then((_) async {
+        if (generation != _initializationGeneration) return;
+        try {
+          await BackupService.instance.maybeCreateAutomaticBackup();
+        } catch (_) {
+          // Backup automático nunca impede o usuário de entrar no app.
+        }
+      }).catchError((_) {}),
     );
   }
 
