@@ -188,9 +188,14 @@ if 'academia_flow.notification_icon_keep' not in m:
         '        <meta-data android:name="academia_flow.notification_icon_keep" android:resource="@drawable/ic_stat_academia_flow" />\n    </application>',
     )
 
-receivers = '''\n        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />\n        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n            <intent-filter>\n                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>\n                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>\n                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>\n            </intent-filter>\n        </receiver>\n'''
-if 'ScheduledNotificationReceiver' not in m:
+receivers = '''\n        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />\n        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />\n        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n            <intent-filter>\n                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>\n                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>\n                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>\n            </intent-filter>\n        </receiver>\n'''
+if 'ActionBroadcastReceiver' not in m:
     m = m.replace('    </application>', receivers + '    </application>')
+elif 'ScheduledNotificationReceiver' not in m:
+    m = m.replace(
+        '    </application>',
+        receivers.replace('        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />\n', '') + '    </application>',
+    )
 manifest.write_text(m)
 
 print('Android configurado: assinatura persistente, notificações e launcher gerado nativamente.')
