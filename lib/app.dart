@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'data/app_database.dart';
 import 'screens/onboarding_screen.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
@@ -17,12 +20,17 @@ class AcademiaFlowApp extends StatefulWidget {
 class _AcademiaFlowAppState extends State<AcademiaFlowApp> {
   late bool _dark;
   late bool _onboardingComplete;
+  late final AppLifecycleListener _lifecycleListener;
+  bool _refreshingBackgroundAttendance = false;
 
   @override
   void initState() {
     super.initState();
     _captureRootState();
     widget.state.addListener(_handleStateChange);
+    _lifecycleListener = AppLifecycleListener(
+      onResume: () => unawaited(_refreshAfterBackgroundAttendance()),
+    );
   }
 
   @override
@@ -36,6 +44,7 @@ class _AcademiaFlowAppState extends State<AcademiaFlowApp> {
 
   @override
   void dispose() {
+    _lifecycleListener.dispose();
     widget.state.removeListener(_handleStateChange);
     super.dispose();
   }
@@ -54,6 +63,27 @@ class _AcademiaFlowAppState extends State<AcademiaFlowApp> {
       _dark = dark;
       _onboardingComplete = onboarding;
     });
+  }
+
+  Future<void> _refreshAfterBackgroundAttendance() async {
+    if (_refreshingBackgroundAttendance) return;
+    _refreshingBackgroundAttendance = true;
+    final database = AppDatabase.instance;
+    try {
+      final marker = await database.getSetting('background_attendance_refresh');
+      if (marker == null || marker.trim().isEmpty) return;
+
+      // O callback da notificação altera o SQLite sem acordar a interface.
+      // Ao voltar ao app, recarregamos somente quando existe esse marcador.
+      await widget.state.reloadAll(notify: false);
+      await widget.state.updateRoutineSettings();
+      await database.setSetting('background_attendance_refresh', '');
+    } catch (_) {
+      // Se a recarga falhar, preserva o marcador para tentar novamente no
+      // próximo resume em vez de deixar o estado visual desatualizado.
+    } finally {
+      _refreshingBackgroundAttendance = false;
+    }
   }
 
   @override
