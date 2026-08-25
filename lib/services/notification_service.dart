@@ -1,10 +1,66 @@
 import 'dart:io' show Platform;
+import 'dart:ui' show DartPluginRegistrant;
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import '../data/app_database.dart';
 import '../models/models.dart';
+
+const _backgroundAttendanceRefreshKey = 'background_attendance_refresh';
+
+@pragma('vm:entry-point')
+Future<void> notificationTapBackground(fln.NotificationResponse response) async {
+  final actionId = response.actionId ?? '';
+  final payload = response.payload ?? '';
+  if (!actionId.startsWith('routine_') || !payload.startsWith('session:')) return;
+
+  DartPluginRegistrant.ensureInitialized();
+
+  final sessionId = int.tryParse(payload.split(':').last);
+  if (sessionId == null) return;
+
+  final status = switch (actionId) {
+    'routine_present' => AttendanceStatus.present,
+    'routine_absent' => AttendanceStatus.absent,
+    'routine_cancelled' => AttendanceStatus.cancelled,
+    _ => null,
+  };
+  if (status == null) return;
+
+  try {
+    final database = AppDatabase.instance;
+    final sessions = await database.getClassSessions();
+    ClassSession? session;
+    for (final item in sessions) {
+      if (item.id == sessionId) {
+        session = item;
+        break;
+      }
+    }
+    if (session == null) return;
+
+    if ((status == AttendanceStatus.present || status == AttendanceStatus.absent) &&
+        session.startsAt.isAfter(DateTime.now())) {
+      return;
+    }
+
+    await database.saveClassSession(session.copyWith(status: status));
+    await database.setSetting(_backgroundAttendanceRefreshKey, DateTime.now().toIso8601String());
+
+    // A ação já foi concluída sem abrir a interface. Cancela todos os avisos
+    // vinculados à sessão para não mostrar o check-in novamente no fim da aula.
+    final plugin = fln.FlutterLocalNotificationsPlugin();
+    final base = 1000000 + sessionId * 10;
+    for (var i = 1; i <= 4; i++) {
+      await plugin.cancel(id: base + i);
+    }
+  } catch (_) {
+    // O callback roda fora da UI. Uma falha aqui não deve tentar abrir o app
+    // nem provocar uma segunda ação sobre a notificação.
+  }
+}
 
 class NotificationService {
   NotificationService._();
@@ -46,9 +102,24 @@ class NotificationService {
       importance: fln.Importance.max,
       priority: fln.Priority.max,
       actions: <fln.AndroidNotificationAction>[
-        fln.AndroidNotificationAction('routine_present', '✓ Presente', showsUserInterface: true),
-        fln.AndroidNotificationAction('routine_absent', 'Faltei', showsUserInterface: true),
-        fln.AndroidNotificationAction('routine_cancelled', 'Cancelada', showsUserInterface: true),
+        fln.AndroidNotificationAction(
+          'routine_present',
+          '✓ Presente',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+        fln.AndroidNotificationAction(
+          'routine_absent',
+          'Faltei',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+        fln.AndroidNotificationAction(
+          'routine_cancelled',
+          'Cancelada',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
       ],
     ),
   );
@@ -87,6 +158,7 @@ class NotificationService {
           android: fln.AndroidInitializationSettings('ic_stat_academia_flow'),
         ),
         onDidReceiveNotificationResponse: _handleResponse,
+        onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
       );
       _ready = true;
 
