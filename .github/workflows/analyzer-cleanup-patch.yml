@@ -1,0 +1,190 @@
+name: One-shot analyzer cleanup
+
+on:
+  push:
+    branches: [fix/polimento-p0-p2]
+    paths:
+      - '.github/run-analyzer-cleanup.trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/polimento-p0-p2
+
+      - name: Fix analyzer findings
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected 1 match, got {count}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          def replace_count(path, old, new, expected):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f'{path}: expected {expected} matches, got {count}: {old[:120]!r}')
+              p.write_text(text.replace(old, new), encoding='utf-8')
+
+          # Null-aware collection elements required by current Flutter lints.
+          replace_count(
+              'lib/integrations/google/classroom_api.dart',
+              "        if (pageToken != null) 'pageToken': pageToken,",
+              "        'pageToken': ?pageToken,",
+              3,
+          )
+          replace_once(
+              'lib/widgets/common.dart',
+              "          if (trailing != null) trailing!,",
+              "          ?trailing,",
+          )
+          replace_once(
+              'lib/widgets/common.dart',
+              "          if (action != null) action!,",
+              "          ?action,",
+          )
+
+          # Prefer conditional assignment.
+          replace_once(
+              'lib/integrations/google/google_integration_controller.dart',
+              "      if (target == null) {\n        target = await state.saveSubject(Subject(name: course.name.trim().isEmpty ? 'Turma do Classroom' : course.name.trim(), room: course.section.trim()));\n      }",
+              "      target ??= await state.saveSubject(Subject(name: course.name.trim().isEmpty ? 'Turma do Classroom' : course.name.trim(), room: course.section.trim()));",
+          )
+
+          # Wildcard parameters.
+          replace_once(
+              'lib/screens/attachment_manager_screen.dart',
+              "      separatorBuilder: (_, __) => const SizedBox(height: 8),",
+              "      separatorBuilder: (_, _) => const SizedBox(height: 8),",
+          )
+          replace_once(
+              'lib/screens/global_search_screen.dart',
+              "                        separatorBuilder: (_, __) => const SizedBox(height: 3),",
+              "                        separatorBuilder: (_, _) => const SizedBox(height: 3),",
+          )
+          replace_count(
+              'lib/widgets/motion.dart',
+              "      builder: (_, v, __) =>",
+              "      builder: (_, v, _) =>",
+              2,
+          )
+          replace_once(
+              'lib/widgets/motion.dart',
+              "    pageBuilder: (_, animation, __) => page,",
+              "    pageBuilder: (_, _, _) => page,",
+          )
+
+          # Flow analysis already proves task non-null after the early return.
+          replace_once(
+              'lib/screens/google_integration_screen.dart',
+              "                leading: Icon(task!.status == TaskStatus.done ? Icons.task_alt_rounded : Icons.assignment_outlined, color: task!.status == TaskStatus.done ? AppColors.success : null),\n                title: Text(task!.title, style: const TextStyle(fontWeight: FontWeight.w800)),\n                subtitle: Text('${state.subjectName(task!.subjectId)} • ${_submission(link.submissionState)}'),",
+              "                leading: Icon(task.status == TaskStatus.done ? Icons.task_alt_rounded : Icons.assignment_outlined, color: task.status == TaskStatus.done ? AppColors.success : null),\n                title: Text(task.title, style: const TextStyle(fontWeight: FontWeight.w800)),\n                subtitle: Text('${state.subjectName(task.subjectId)} • ${_submission(link.submissionState)}'),",
+          )
+
+          # BuildContext guards across async gaps: Library.
+          replace_once(
+              'lib/screens/library_screen.dart',
+              "                          if (value == 'open' && _canOpen(note.link)) await launchUrl(Uri.parse(note.link), mode: LaunchMode.externalApplication);\n                          if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);",
+              "                          if (value == 'open' && _canOpen(note.link)) await launchUrl(Uri.parse(note.link), mode: LaunchMode.externalApplication);\n                          if (!context.mounted) return;\n                          if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);",
+          )
+          replace_once(
+              'lib/screens/library_screen.dart',
+              "                    if (value == 'edit') await showMaterialEditor(context, state, material: material);\n                    if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);",
+              "                    if (value == 'edit') await showMaterialEditor(context, state, material: material);\n                    if (!context.mounted) return;\n                    if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);",
+          )
+
+          # Nullable on-time metric now has an explicit empty state.
+          replace_once(
+              'lib/screens/routine_screen.dart',
+              "          _InsightCard(icon: Icons.task_alt_rounded, title: 'Atividades concluídas', value: '${state.onTimeTaskRate.toStringAsFixed(0)}%', subtitle: '${state.completedCount}/${state.tasks.length} concluídas'),",
+              "          _InsightCard(icon: Icons.task_alt_rounded, title: 'Entregas no prazo', value: state.onTimeTaskRate == null ? '—' : '${state.onTimeTaskRate!.toStringAsFixed(0)}%', subtitle: '${state.completedCount}/${state.tasks.length} concluídas'),",
+          )
+
+          # BuildContext guards across async gaps: subject detail.
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "                      if (value == 'edit') await showScheduleEditor(context, state, entry: entry);\n                      if (value == 'delete' && await confirmDelete(context, 'horário de ${dayName(entry.day)}')) await state.deleteSchedule(entry);",
+              "                      if (value == 'edit') await showScheduleEditor(context, state, entry: entry);\n                      if (!context.mounted) return;\n                      if (value == 'delete' && await confirmDelete(context, 'horário de ${dayName(entry.day)}')) await state.deleteSchedule(entry);",
+          )
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "              if (value == 'edit') await showTaskEditor(context, state, task: task);\n              if (value == 'attachments' && task.id != null) {",
+              "              if (value == 'edit') await showTaskEditor(context, state, task: task);\n              if (!context.mounted) return;\n              if (value == 'attachments' && task.id != null) {",
+          )
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "              }\n              if (value == 'delete' && await confirmDelete(context, task.title)) await state.deleteTask(task);\n            },\n            itemBuilder: (_) => [\n              const PopupMenuItem(value: 'edit', child: Text('Editar')),\n              if (task.id != null)",
+              "              }\n              if (!context.mounted) return;\n              if (value == 'delete' && await confirmDelete(context, task.title)) await state.deleteTask(task);\n            },\n            itemBuilder: (_) => [\n              const PopupMenuItem(value: 'edit', child: Text('Editar')),\n              if (task.id != null)",
+          )
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "                      if (value == 'edit') await showGradeEditor(context, state, grade: grade);\n                      if (value == 'delete' && await confirmDelete(context, grade.title)) await state.deleteGrade(grade);",
+              "                      if (value == 'edit') await showGradeEditor(context, state, grade: grade);\n                      if (!context.mounted) return;\n                      if (value == 'delete' && await confirmDelete(context, grade.title)) await state.deleteGrade(grade);",
+          )
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "                      if (value == 'edit') await showMaterialEditor(context, state, material: material);\n                      if (value == 'attachments' && material.id != null) {",
+              "                      if (value == 'edit') await showMaterialEditor(context, state, material: material);\n                      if (!context.mounted) return;\n                      if (value == 'attachments' && material.id != null) {",
+          )
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "                      }\n                      if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);\n                    },\n                    itemBuilder: (_) => [\n                      const PopupMenuItem(value: 'edit', child: Text('Editar')),\n                      if (material.id != null)",
+              "                      }\n                      if (!context.mounted) return;\n                      if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);\n                    },\n                    itemBuilder: (_) => [\n                      const PopupMenuItem(value: 'edit', child: Text('Editar')),\n                      if (material.id != null)",
+          )
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "                      if (value == 'edit') await showNoteEditor(context, state, note: note);\n                      if (value == 'attachments' && note.id != null) {",
+              "                      if (value == 'edit') await showNoteEditor(context, state, note: note);\n                      if (!context.mounted) return;\n                      if (value == 'attachments' && note.id != null) {",
+          )
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "                      }\n                      if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);\n                    },\n                    itemBuilder: (_) => [\n                      const PopupMenuItem(value: 'edit', child: Text('Editar')),\n                      if (note.id != null)",
+              "                      }\n                      if (!context.mounted) return;\n                      if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);\n                    },\n                    itemBuilder: (_) => [\n                      const PopupMenuItem(value: 'edit', child: Text('Editar')),\n                      if (note.id != null)",
+          )
+
+          # BuildContext guard in stateful task card menu.
+          replace_once(
+              'lib/screens/tasks_screen.dart',
+              "                  if (value == 'done') await _complete(task);\n                  if (value == 'delete' && await confirmDelete(context, task.title)) await widget.state.deleteTask(task);",
+              "                  if (value == 'done') await _complete(task);\n                  if (!mounted) return;\n                  if (value == 'delete' && await confirmDelete(context, task.title)) await widget.state.deleteTask(task);",
+          )
+
+          # file_picker v12 exposes asynchronous length(), not a size getter.
+          replace_count(
+              'lib/services/attachment_repository.dart',
+              "_ensureAllowedSize(picked.size, picked.name);",
+              "_ensureAllowedSize(await picked.length(), picked.name);",
+              2,
+          )
+
+          # Haptic feedback adds a second async gap.
+          replace_once(
+              'lib/widgets/attendance_feedback.dart',
+              "  } catch (_) {}\n\n  final count = session.classCount;",
+              "  } catch (_) {}\n  if (!context.mounted) return;\n\n  final count = session.classCount;",
+          )
+
+          print('Analyzer findings patched.')
+          PY
+
+      - name: Commit analyzer cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib
+          git commit -m "fix: resolve strict analyzer findings"
+          git push origin HEAD:fix/polimento-p0-p2
