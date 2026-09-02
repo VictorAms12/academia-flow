@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
 import '../integrations/google/google_integration_controller.dart';
 import '../state/app_state.dart';
+import '../state/v26_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common.dart';
 import '../widgets/motion.dart';
@@ -173,6 +175,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
+                if (!state.notifications.available) ...[
+                  const SizedBox(height: 13),
+                  SoftCard(
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Icon(Icons.notifications_off_outlined, color: AppColors.gold),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Notificações locais indisponíveis', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                          const SizedBox(height: 4),
+                          Text(
+                            Platform.isWindows
+                                ? 'A versão Windows mantém toda a organização acadêmica, mas esta versão não agenda notificações locais no desktop. Os lembretes continuam disponíveis no Android.'
+                                : 'O sistema de notificações não pôde ser inicializado neste dispositivo. Seus dados e demais recursos continuam funcionando normalmente.',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(height: 1.45),
+                          ),
+                        ]),
+                      ),
+                    ]),
+                  ),
+                ],
                 const SizedBox(height: 13),
                 SoftCard(
                   child: SwitchListTile(
@@ -227,7 +250,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Apagar dados acadêmicos?'),
-            content: const Text('Matérias, atividades, notas, horários e anotações serão apagados. Seu perfil, conta Google e preferências serão mantidos.'),
+            content: const Text('Matérias, atividades, notas, horários, blocos de estudo e anotações serão apagados. Seu perfil, conta Google e preferências serão mantidos.'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
               FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Apagar dados')),
@@ -237,6 +260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         false;
     if (!ok) return;
     await state.clearAcademicData();
+    await V26Controller.instance.clearAcademicState();
     await GoogleIntegrationController.instance.reloadLinks();
     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dados acadêmicos apagados.')));
   }
@@ -267,6 +291,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!ok) return;
       await GoogleIntegrationController.instance.clearLocalIntegration();
       await state.resetEverything();
+      V26Controller.instance.resetLocalState();
       if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } finally {
       text.dispose();
