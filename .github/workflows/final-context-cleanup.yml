@@ -29,87 +29,42 @@ jobs:
               text = p.read_text(encoding='utf-8')
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f'{path}: expected 1 match, found {count}')
+                  raise SystemExit(f'{path}: expected 1 match, found {count}: {old!r}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
+          # Library: handle delete before any awaited action, so context is never reused after an async gap.
           replace_once(
               'lib/screens/library_screen.dart',
-              """                        onSelected: (value) async {
-                          if (value == 'pin') {
-                            await state.saveNote(AcademicNote(
-                              id: note.id,
-                              subjectId: note.subjectId,
-                              title: note.title,
-                              content: note.content,
-                              link: note.link,
-                              tags: note.tags,
-                              pinned: !note.pinned,
-                              createdAt: note.createdAt,
-                              sessionId: note.sessionId,
-                            ));
-                          }
-                          if (value == 'open' && _canOpen(note.link)) await launchUrl(Uri.parse(note.link), mode: LaunchMode.externalApplication);
-                          if (!context.mounted) return;
-                          if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);
-                        },""",
-              """                        onSelected: (value) async {
-                          if (value == 'delete') {
-                            if (await confirmDelete(context, note.title)) await state.deleteNote(note);
-                            return;
-                          }
-                          if (value == 'pin') {
-                            await state.saveNote(AcademicNote(
-                              id: note.id,
-                              subjectId: note.subjectId,
-                              title: note.title,
-                              content: note.content,
-                              link: note.link,
-                              tags: note.tags,
-                              pinned: !note.pinned,
-                              createdAt: note.createdAt,
-                              sessionId: note.sessionId,
-                            ));
-                          }
-                          if (value == 'open' && _canOpen(note.link)) await launchUrl(Uri.parse(note.link), mode: LaunchMode.externalApplication);
-                        },""",
+              "                          if (value == 'pin') {",
+              "                          if (value == 'delete') {\n                            if (await confirmDelete(context, note.title)) await state.deleteNote(note);\n                            return;\n                          }\n                          if (value == 'pin') {",
+          )
+          replace_once(
+              'lib/screens/library_screen.dart',
+              "                          if (!context.mounted) return;\n                          if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);\n",
+              "",
           )
 
           replace_once(
               'lib/screens/library_screen.dart',
-              """                  onSelected: (value) async {
-                    if (value == 'edit') await showMaterialEditor(context, state, material: material);
-                    if (!context.mounted) return;
-                    if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);
-                  },""",
-              """                  onSelected: (value) async {
-                    if (value == 'delete') {
-                      if (await confirmDelete(context, material.title)) await state.deleteMaterial(material);
-                      return;
-                    }
-                    if (value == 'edit') await showMaterialEditor(context, state, material: material);
-                  },""",
+              "                    if (value == 'edit') await showMaterialEditor(context, state, material: material);",
+              "                    if (value == 'delete') {\n                      if (await confirmDelete(context, material.title)) await state.deleteMaterial(material);\n                      return;\n                    }\n                    if (value == 'edit') await showMaterialEditor(context, state, material: material);",
+          )
+          replace_once(
+              'lib/screens/library_screen.dart',
+              "                    if (!context.mounted) return;\n                    if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);\n",
+              "",
           )
 
+          # Tasks: same ordering; deletion owns the context before any other awaited operation.
           replace_once(
               'lib/screens/tasks_screen.dart',
-              """                onSelected: (value) async {
-                  if (value == 'edit') await showTaskEditor(context, widget.state, task: task);
-                  if (value == 'todo') await _move(task, TaskStatus.todo);
-                  if (value == 'doing') await _move(task, TaskStatus.doing);
-                  if (value == 'done') await _complete(task);
-                  if (!mounted) return;
-                  if (value == 'delete' && await confirmDelete(context, task.title)) await widget.state.deleteTask(task);
-                },""",
-              """                onSelected: (value) async {
-                  if (value == 'delete') {
-                    if (await confirmDelete(context, task.title)) await widget.state.deleteTask(task);
-                    return;
-                  }
-                  if (value == 'edit') await showTaskEditor(context, widget.state, task: task);
-                  if (value == 'todo') await _move(task, TaskStatus.todo);
-                  if (value == 'doing') await _move(task, TaskStatus.doing);
-                  if (value == 'done') await _complete(task);
-                },""",
+              "                  if (value == 'edit') await showTaskEditor(context, widget.state, task: task);",
+              "                  if (value == 'delete') {\n                    if (await confirmDelete(context, task.title)) await widget.state.deleteTask(task);\n                    return;\n                  }\n                  if (value == 'edit') await showTaskEditor(context, widget.state, task: task);",
+          )
+          replace_once(
+              'lib/screens/tasks_screen.dart',
+              "                  if (!mounted) return;\n                  if (value == 'delete' && await confirmDelete(context, task.title)) await widget.state.deleteTask(task);\n",
+              "",
           )
 
           print('Remaining BuildContext findings fixed.')
