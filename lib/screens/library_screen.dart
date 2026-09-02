@@ -328,6 +328,10 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
                         ),
                       PopupMenuButton<String>(
                         onSelected: (value) async {
+                          if (value == 'delete') {
+                            if (await confirmDelete(context, note.title)) await state.deleteNote(note);
+                            return;
+                          }
                           if (value == 'pin') {
                             await state.saveNote(AcademicNote(
                               id: note.id,
@@ -342,8 +346,6 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
                             ));
                           }
                           if (value == 'open' && _canOpen(note.link)) await launchUrl(Uri.parse(note.link), mode: LaunchMode.externalApplication);
-                          if (!context.mounted) return;
-                          if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);
                         },
                         itemBuilder: (_) => [
                           PopupMenuItem(value: 'pin', child: Text(note.pinned ? 'Desafixar' : 'Fixar')),
@@ -449,9 +451,11 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
                   ),
                 PopupMenuButton<String>(
                   onSelected: (value) async {
+                    if (value == 'delete') {
+                      if (await confirmDelete(context, material.title)) await state.deleteMaterial(material);
+                      return;
+                    }
                     if (value == 'edit') await showMaterialEditor(context, state, material: material);
-                    if (!context.mounted) return;
-                    if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);
                   },
                   itemBuilder: (_) => const [
                     PopupMenuItem(value: 'edit', child: Text('Editar')),
