@@ -17,6 +17,7 @@ class V26Controller extends ChangeNotifier {
   bool loading = false;
   List<StudyBlock> studyBlocks = [];
   Set<String> dismissedInsights = <String>{};
+  final Map<String, Future<StudyBlock>> _pendingStudyCreates = {};
 
   bool get initialized => _initialized;
 
@@ -37,6 +38,26 @@ class V26Controller extends ChangeNotifier {
   }
 
   void bind(AppState state) => _state = state;
+
+  Future<void> clearAcademicState() async {
+    studyBlocks = [];
+    dismissedInsights = <String>{};
+    await Future.wait([
+      _db.setSetting('study_blocks_v26', '[]'),
+      _db.setSetting('dismissed_insights_v26', '[]'),
+    ]);
+    notifyListeners();
+  }
+
+  void resetLocalState() {
+    _state = null;
+    _initialized = false;
+    loading = false;
+    studyBlocks = [];
+    dismissedInsights = <String>{};
+    _pendingStudyCreates.clear();
+    notifyListeners();
+  }
 
   List<StudyBlock> studyBlocksForDate(DateTime date) {
     final items = studyBlocks.where((block) => _sameDay(block.startsAt, date)).toList()
@@ -59,6 +80,12 @@ class V26Controller extends ChangeNotifier {
     required int durationMinutes,
     String note = '',
   }) async {
+    final createKey = existing == null
+        ? '${title.trim()}|${startsAt.toIso8601String()}|$subjectId|$durationMinutes|${note.trim()}'
+        : null;
+    final pending = createKey == null ? null : _pendingStudyCreates[createKey];
+    if (pending != null) return pending;
+
     final block = StudyBlock(
       id: existing?.id ?? 'sb-${DateTime.now().microsecondsSinceEpoch}',
       title: title.trim(),
@@ -77,10 +104,20 @@ class V26Controller extends ChangeNotifier {
       next[index] = block;
       studyBlocks = next;
     }
-    _sortBlocks();
-    await _persistStudyBlocks();
-    notifyListeners();
-    return block;
+    final operation = () async {
+      _sortBlocks();
+      await _persistStudyBlocks();
+      notifyListeners();
+      return block;
+    }();
+    if (createKey != null) _pendingStudyCreates[createKey] = operation;
+    try {
+      return await operation;
+    } finally {
+      if (createKey != null && identical(_pendingStudyCreates[createKey], operation)) {
+        _pendingStudyCreates.remove(createKey);
+      }
+    }
   }
 
   Future<void> toggleStudyBlock(StudyBlock block) async {

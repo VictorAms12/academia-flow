@@ -205,15 +205,15 @@ class _AttendanceCard extends StatelessWidget {
     final attendance = state.attendanceForSubject(subject);
     final target = state.attendanceTarget(subject);
     final remaining = state.remainingAbsences(subject);
-    final risk = state.attendanceRiskLabel(subject);
-    final riskColor = switch (risk) { 'SEGURO' => AppColors.success, 'ATENÇÃO' => AppColors.gold, 'RISCO' => Colors.orange, _ => AppColors.danger };
+    final risk = subject.hasAttendanceHistory ? state.attendanceRiskLabel(subject) : 'SEM DADOS';
+    final riskColor = switch (risk) { 'SEGURO' => AppColors.success, 'ATENÇÃO' => AppColors.gold, 'RISCO' => Colors.orange, 'SEM DADOS' => Theme.of(context).colorScheme.outline, _ => AppColors.danger };
     return SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [Expanded(child: Text(subject.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))), Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: riskColor.withValues(alpha: .11), borderRadius: BorderRadius.circular(20)), child: Text(risk, style: TextStyle(color: riskColor, fontSize: 9, fontWeight: FontWeight.w900)))]),
       const SizedBox(height: 12),
-      Text('${attendance.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
-      Text('meta ${target.toStringAsFixed(0)}% • ${state.completedClassCount(subject)} aulas registradas', style: Theme.of(context).textTheme.bodySmall),
+      Text(subject.hasAttendanceHistory ? '${attendance.toStringAsFixed(1)}%' : '—', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+      Text(subject.hasAttendanceHistory ? 'meta ${target.toStringAsFixed(0)}% • ${state.completedClassCount(subject)} aulas registradas' : 'Nenhuma aula registrada ainda', style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: 8),
-      LinearProgressIndicator(value: (attendance / 100).clamp(0, 1), minHeight: 7, borderRadius: BorderRadius.circular(20)),
+      LinearProgressIndicator(value: subject.hasAttendanceHistory ? (attendance / 100).clamp(0, 1) : 0, minHeight: 7, borderRadius: BorderRadius.circular(20)),
       const Spacer(),
       Text(remaining >= 9999 ? 'Defina o total planejado para calcular faltas restantes.' : 'Você ainda pode faltar $remaining aula${remaining == 1 ? '' : 's'}.', style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: 9),
@@ -344,7 +344,7 @@ class _InsightsTab extends StatelessWidget {
         final cards = [
           _InsightCard(icon: Icons.calendar_view_week_rounded, title: 'Esta semana', value: '${week['present'] ?? 0}/${week['classes'] ?? 0}', subtitle: '${week['absent'] ?? 0} faltas • ${week['pending'] ?? 0} pendentes'),
           _InsightCard(icon: Icons.how_to_reg_rounded, title: 'Presença geral', value: '${overall.toStringAsFixed(1)}%', subtitle: '$resolved aulas confirmadas'),
-          _InsightCard(icon: Icons.task_alt_rounded, title: 'Atividades concluídas', value: '${state.onTimeTaskRate.toStringAsFixed(0)}%', subtitle: '${state.completedCount}/${state.tasks.length} concluídas'),
+          _InsightCard(icon: Icons.task_alt_rounded, title: 'Entregas no prazo', value: state.onTimeTaskRate == null ? '—' : '${state.onTimeTaskRate!.toStringAsFixed(0)}%', subtitle: '${state.completedCount}/${state.tasks.length} concluídas'),
           if (state.streakEnabled) _InsightCard(icon: Icons.local_fire_department_rounded, title: 'Sequência', value: '${state.attendanceStreak}', subtitle: 'aulas consecutivas presentes'),
         ];
         final cols = c.maxWidth >= 900 ? 4 : c.maxWidth >= 600 ? 2 : 1;

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -9,12 +10,17 @@ text = app_gradle.read_text()
 if 'isCoreLibraryDesugaringEnabled = true' not in text:
     text = text.replace('compileOptions {', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', 1)
 
-if 'signingConfigs {' not in text:
-    marker = '    buildTypes {'
-    signing = '''    signingConfigs {\n        create("academiaFlow") {\n            storeFile = file("academia-flow-upload.jks")\n            storePassword = System.getenv("ACADEMIA_FLOW_STORE_PASSWORD") ?: ""\n            keyAlias = "academiaflow"\n            keyPassword = System.getenv("ACADEMIA_FLOW_KEY_PASSWORD") ?: ""\n        }\n    }\n\n'''
-    text = text.replace(marker, signing + marker, 1)
+release_signing = os.getenv('ACADEMIA_FLOW_RELEASE_SIGNING', '').strip().lower() == 'true'
+if release_signing:
+    if 'signingConfigs {' not in text:
+        marker = '    buildTypes {'
+        signing = '''    signingConfigs {\n        create("academiaFlow") {\n            storeFile = file("academia-flow-upload.jks")\n            storePassword = System.getenv("ACADEMIA_FLOW_STORE_PASSWORD") ?: ""\n            keyAlias = "academiaflow"\n            keyPassword = System.getenv("ACADEMIA_FLOW_KEY_PASSWORD") ?: ""\n        }\n    }\n\n'''
+        text = text.replace(marker, signing + marker, 1)
 
-text = text.replace('signingConfig = signingConfigs.getByName("debug")', 'signingConfig = signingConfigs.getByName("academiaFlow")')
+    text = text.replace(
+        'signingConfig = signingConfigs.getByName("debug")',
+        'signingConfig = signingConfigs.getByName("academiaFlow")',
+    )
 
 if 'coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' not in text:
     text += '\n\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
@@ -193,4 +199,5 @@ if 'ScheduledNotificationReceiver' not in m:
     m = m.replace('    </application>', receivers + '    </application>')
 manifest.write_text(m)
 
-print('Android configurado: assinatura persistente, notificações e launcher gerado nativamente.')
+signing_label = 'assinatura release via secrets' if release_signing else 'assinatura de desenvolvimento do Flutter para artefato de CI'
+print(f'Android configurado: {signing_label}, notificações e launcher gerado nativamente.')

@@ -148,9 +148,7 @@ class GoogleIntegrationController extends ChangeNotifier {
     if (state == null || profile == null) return;
     await _run(() async {
       var target = subject;
-      if (target == null) {
-        target = await state.saveSubject(Subject(name: course.name.trim().isEmpty ? 'Turma do Classroom' : course.name.trim(), room: course.section.trim()));
-      }
+      target ??= await state.saveSubject(Subject(name: course.name.trim().isEmpty ? 'Turma do Classroom' : course.name.trim(), room: course.section.trim()));
       if (target.id == null) throw StateError('Não foi possível vincular a matéria local.');
       await _store.saveCourseLink(ClassroomCourseLink(
         googleUserId: profile.id,

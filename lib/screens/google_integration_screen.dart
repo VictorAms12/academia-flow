@@ -420,9 +420,9 @@ class _ImportedTasksCard extends StatelessWidget {
               if (task == null) return const SizedBox.shrink();
               return ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(task!.status == TaskStatus.done ? Icons.task_alt_rounded : Icons.assignment_outlined, color: task!.status == TaskStatus.done ? AppColors.success : null),
-                title: Text(task!.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: Text('${state.subjectName(task!.subjectId)} • ${_submission(link.submissionState)}'),
+                leading: Icon(task.status == TaskStatus.done ? Icons.task_alt_rounded : Icons.assignment_outlined, color: task.status == TaskStatus.done ? AppColors.success : null),
+                title: Text(task.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text('${state.subjectName(task.subjectId)} • ${_submission(link.submissionState)}'),
                 trailing: link.alternateLink.isEmpty ? null : IconButton(tooltip: 'Abrir no Classroom', onPressed: () => controller.openClassroom(link.alternateLink), icon: const Icon(Icons.open_in_new_rounded)),
               );
             }),

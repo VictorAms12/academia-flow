@@ -215,11 +215,14 @@ class _TaskCardState extends State<_TaskCard> {
               PopupMenuButton<String>(
                 enabled: !mutating,
                 onSelected: (value) async {
+                  if (value == 'delete') {
+                    if (await confirmDelete(context, task.title)) await widget.state.deleteTask(task);
+                    return;
+                  }
                   if (value == 'edit') await showTaskEditor(context, widget.state, task: task);
                   if (value == 'todo') await _move(task, TaskStatus.todo);
                   if (value == 'doing') await _move(task, TaskStatus.doing);
                   if (value == 'done') await _complete(task);
-                  if (value == 'delete' && await confirmDelete(context, task.title)) await widget.state.deleteTask(task);
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'edit', child: Text('Editar')),

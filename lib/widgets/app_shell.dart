@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/models.dart';
 import '../screens/analytics_screen.dart';
 import '../screens/global_search_screen.dart';
 import '../screens/home_screen.dart';
@@ -7,12 +8,13 @@ import '../screens/routine_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/subjects_screen.dart';
 import '../screens/tasks_screen.dart';
+import '../services/notification_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import 'motion.dart';
 import 'v22_actions.dart';
 
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
   static const destinations = [
@@ -22,6 +24,64 @@ class AppShell extends StatelessWidget {
     (Icons.analytics_rounded, 'Desempenho'),
     (Icons.school_rounded, 'Rotina'),
   ];
+
+  @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  final NotificationService _notifications = NotificationService.instance;
+  bool _handlingNotificationNavigation = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _notifications.navigationPayload.addListener(_onNavigationPayloadChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeNavigationPayload());
+  }
+
+  @override
+  void dispose() {
+    _notifications.navigationPayload.removeListener(_onNavigationPayloadChanged);
+    super.dispose();
+  }
+
+  void _onNavigationPayloadChanged() {
+    if (_notifications.navigationPayload.value == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeNavigationPayload());
+  }
+
+  Future<void> _consumeNavigationPayload() async {
+    if (!mounted || _handlingNotificationNavigation) return;
+    final payload = _notifications.takeNavigationPayload();
+    if (payload == null || payload.isEmpty) return;
+
+    _handlingNotificationNavigation = true;
+    try {
+      final state = AppStateScope.of(context);
+      if (payload.startsWith('task:')) {
+        final id = int.tryParse(payload.split(':').last);
+        AcademicTask? task;
+        for (final candidate in state.tasks) {
+          if (candidate.id == id) {
+            task = candidate;
+            break;
+          }
+        }
+        state.setIndex(2);
+        if (task != null && mounted) {
+          await showTaskEditor(context, state, task: task);
+        }
+        return;
+      }
+
+      if (payload.startsWith('session:')) {
+        state.setIndex(4);
+      }
+    } finally {
+      _handlingNotificationNavigation = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,24 +107,15 @@ class AppShell extends StatelessWidget {
                     children: [
                       _TopBar(desktop: desktop, state: state),
                       Expanded(
-                        child: AnimatedSwitcher(
-                          duration: MotionSpec.normal,
-                          reverseDuration: MotionSpec.fast,
-                          switchInCurve: MotionSpec.curve,
-                          switchOutCurve: Curves.easeInCubic,
-                          layoutBuilder: (currentChild, previousChildren) => Stack(
-                            fit: StackFit.expand,
-                            children: [...previousChildren, if (currentChild != null) currentChild],
-                          ),
-                          transitionBuilder: (child, animation) => _ScreenTransition(
-                            index: state.currentIndex,
-                            animation: animation,
-                            child: child,
-                          ),
-                          child: KeyedSubtree(
-                            key: ValueKey(state.currentIndex),
-                            child: screens[state.currentIndex],
-                          ),
+                        child: IndexedStack(
+                          index: state.currentIndex,
+                          children: [
+                            for (var i = 0; i < screens.length; i++)
+                              TickerMode(
+                                enabled: state.currentIndex == i,
+                                child: screens[i],
+                              ),
+                          ],
                         ),
                       ),
                     ],
@@ -87,30 +138,11 @@ class AppShell extends StatelessWidget {
               : NavigationBar(
                   selectedIndex: state.currentIndex,
                   onDestinationSelected: state.setIndex,
-                  destinations: [for (final d in destinations) NavigationDestination(icon: Icon(d.$1), label: d.$2)],
+                  destinations: [for (final d in AppShell.destinations) NavigationDestination(icon: Icon(d.$1), label: d.$2)],
                 ),
         );
       },
     );
-  }
-}
-
-class _ScreenTransition extends StatelessWidget {
-  const _ScreenTransition({required this.index, required this.animation, required this.child});
-  final int index;
-  final Animation<double> animation;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final fade = FadeTransition(opacity: animation, child: child);
-    return switch (index) {
-      0 => SlideTransition(position: Tween<Offset>(begin: const Offset(0, .018), end: Offset.zero).animate(animation), child: fade),
-      1 => SlideTransition(position: Tween<Offset>(begin: const Offset(.025, 0), end: Offset.zero).animate(animation), child: fade),
-      2 => ScaleTransition(scale: Tween<double>(begin: .988, end: 1).animate(animation), child: fade),
-      3 => ScaleTransition(scale: Tween<double>(begin: .995, end: 1).animate(animation), child: fade),
-      _ => SlideTransition(position: Tween<Offset>(begin: const Offset(0, .022), end: Offset.zero).animate(animation), child: fade),
-    };
   }
 }
 
@@ -135,7 +167,7 @@ class _DesktopNav extends StatelessWidget {
             SizedBox(width: 11),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Academia Flow', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-              Text('Academic OS • 2.6.1', style: TextStyle(fontSize: 10)),
+              Text('Academic OS', style: TextStyle(fontSize: 11)),
             ])),
           ]),
           const SizedBox(height: 28),
@@ -161,7 +193,7 @@ class _DesktopNav extends StatelessWidget {
               padding: const EdgeInsets.all(13),
               decoration: BoxDecoration(color: AppColors.gold.withValues(alpha: .08), borderRadius: BorderRadius.circular(15), border: Border.all(color: AppColors.gold.withValues(alpha: .16))),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('SEMESTRE', style: TextStyle(color: AppColors.gold, fontSize: 9, fontWeight: FontWeight.w900)),
+                const Text('SEMESTRE', style: TextStyle(color: AppColors.gold, fontSize: 10, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 4),
                 Text(state.semester, style: const TextStyle(fontWeight: FontWeight.w900)),
               ]),
@@ -171,7 +203,7 @@ class _DesktopNav extends StatelessWidget {
             const SizedBox(width: 9),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(state.userName, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-              Text(state.period.isEmpty ? state.course : '${state.course} • ${state.period}', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 9)),
+              Text(state.period.isEmpty ? state.course : '${state.course} • ${state.period}', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10)),
             ])),
           ]),
         ],
@@ -214,7 +246,7 @@ class _MotionNavItemState extends State<_MotionNavItem> {
               const SizedBox(width: 11),
               Expanded(child: Text(widget.label, style: TextStyle(fontWeight: widget.selected ? FontWeight.w900 : FontWeight.w600))),
               if (widget.badge != null)
-                Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3), decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(20)), child: Text('${widget.badge}', style: const TextStyle(color: AppColors.petroleumDark, fontSize: 9, fontWeight: FontWeight.w900))),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3), decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(20)), child: Text('${widget.badge}', style: const TextStyle(color: AppColors.petroleumDark, fontSize: 10, fontWeight: FontWeight.w900))),
             ]),
           ),
         ),

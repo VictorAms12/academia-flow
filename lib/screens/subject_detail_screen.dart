@@ -78,7 +78,7 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> with SingleTi
                       final metrics = Row(mainAxisSize: MainAxisSize.min, children: [
                         _Metric(label: 'Média', value: avg == null ? '—' : avg.toStringAsFixed(1)),
                         const SizedBox(width: 22),
-                        _Metric(label: 'Frequência', value: '${subject.attendance.toStringAsFixed(0)}%'),
+                        _Metric(label: 'Frequência', value: subject.hasAttendanceHistory ? '${subject.attendance.toStringAsFixed(0)}%' : '—'),
                         const SizedBox(width: 22),
                         _Metric(label: 'Faltas', value: '${subject.absences}'),
                       ]);
@@ -183,6 +183,7 @@ class _ClassesTab extends StatelessWidget {
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showScheduleEditor(context, state, entry: entry);
+                      if (!context.mounted) return;
                       if (value == 'delete' && await confirmDelete(context, 'horário de ${dayName(entry.day)}')) await state.deleteSchedule(entry);
                     },
                     itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Excluir'))],
@@ -196,11 +197,11 @@ class _ClassesTab extends StatelessWidget {
         SoftCard(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Expanded(child: Text('${subject.attendance.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900))),
+              Expanded(child: Text(subject.hasAttendanceHistory ? '${subject.attendance.toStringAsFixed(1)}%' : '—', style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900))),
               GoldBadge('${subject.absences} FALTA${subject.absences == 1 ? '' : 'S'}'),
             ]),
             const SizedBox(height: 9),
-            LinearProgressIndicator(value: subject.attendance / 100, minHeight: 8, borderRadius: BorderRadius.circular(20), color: subject.attendance < target ? AppColors.danger : AppColors.success),
+            LinearProgressIndicator(value: subject.hasAttendanceHistory ? subject.attendance / 100 : 0, minHeight: 8, borderRadius: BorderRadius.circular(20), color: subject.hasAttendanceHistory && subject.attendance < target ? AppColors.danger : AppColors.success),
             const SizedBox(height: 9),
             Text(
               subject.totalClasses == 0
@@ -269,6 +270,7 @@ class _SubjectTaskCard extends StatelessWidget {
           PopupMenuButton<String>(
             onSelected: (value) async {
               if (value == 'edit') await showTaskEditor(context, state, task: task);
+              if (!context.mounted) return;
               if (value == 'attachments' && task.id != null) {
                 await showAttachmentManager(
                   context,
@@ -276,6 +278,7 @@ class _SubjectTaskCard extends StatelessWidget {
                   title: task.title,
                 );
               }
+              if (!context.mounted) return;
               if (value == 'delete' && await confirmDelete(context, task.title)) await state.deleteTask(task);
             },
             itemBuilder: (_) => [
@@ -360,6 +363,7 @@ class _GradesTab extends StatelessWidget {
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showGradeEditor(context, state, grade: grade);
+                      if (!context.mounted) return;
                       if (value == 'delete' && await confirmDelete(context, grade.title)) await state.deleteGrade(grade);
                     },
                     itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Excluir'))],
@@ -424,6 +428,7 @@ class _ResourcesTab extends StatelessWidget {
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showMaterialEditor(context, state, material: material);
+                      if (!context.mounted) return;
                       if (value == 'attachments' && material.id != null) {
                         await showAttachmentManager(
                           context,
@@ -431,6 +436,7 @@ class _ResourcesTab extends StatelessWidget {
                           title: material.title,
                         );
                       }
+                      if (!context.mounted) return;
                       if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);
                     },
                     itemBuilder: (_) => [
@@ -489,6 +495,7 @@ class _ResourcesTab extends StatelessWidget {
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showNoteEditor(context, state, note: note);
+                      if (!context.mounted) return;
                       if (value == 'attachments' && note.id != null) {
                         await showAttachmentManager(
                           context,
@@ -496,6 +503,7 @@ class _ResourcesTab extends StatelessWidget {
                           title: note.title,
                         );
                       }
+                      if (!context.mounted) return;
                       if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);
                     },
                     itemBuilder: (_) => [

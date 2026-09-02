@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -11,6 +12,7 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   final fln.FlutterLocalNotificationsPlugin _plugin = fln.FlutterLocalNotificationsPlugin();
+  final ValueNotifier<String?> navigationPayload = ValueNotifier<String?>(null);
   bool _ready = false;
   bool _unavailable = false;
   String? lastError;
@@ -64,7 +66,13 @@ class NotificationService {
   );
 
   bool get _portableWindows => Platform.isWindows;
-  bool get available => !_unavailable;
+  bool get available => !_portableWindows && !_unavailable;
+
+  String? takeNavigationPayload() {
+    final payload = navigationPayload.value;
+    navigationPayload.value = null;
+    return payload;
+  }
 
   Future<void> initialize() async {
     if (_ready) return;
@@ -110,6 +118,7 @@ class NotificationService {
 
   Future<void> _handleResponse(fln.NotificationResponse response) async {
     final payload = response.payload ?? '';
+    if (payload.isNotEmpty) navigationPayload.value = payload;
     try {
       if (response.actionId?.startsWith('routine_') == true && payload.startsWith('session:')) {
         await onRoutineAction?.call(response.actionId!, payload);
@@ -123,8 +132,7 @@ class NotificationService {
 
   Future<bool> requestPermission() async {
     await initialize();
-    if (_portableWindows) return true;
-    if (_unavailable) return false;
+    if (_portableWindows || _unavailable) return false;
     try {
       final android = _plugin.resolvePlatformSpecificImplementation<fln.AndroidFlutterLocalNotificationsPlugin>();
       return await android?.requestNotificationsPermission() ?? true;

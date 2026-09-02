@@ -162,7 +162,7 @@ class _AttachmentManagerScreenState extends State<AttachmentManagerScreen> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 100),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (_, index) => _AttachmentCard(
         item: items[index],
         onOpen: () => _open(items[index]),

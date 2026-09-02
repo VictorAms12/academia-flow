@@ -18,6 +18,8 @@ android/local.properties
 android/key.properties
 **/*.jks
 **/*.keystore
+**/*.jks.b64
+.github/signing/
 
 # OS
 .DS_Store

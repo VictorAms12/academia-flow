@@ -18,6 +18,7 @@ Future<void> markAttendanceWithFeedback(
   try {
     await HapticFeedback.selectionClick();
   } catch (_) {}
+  if (!context.mounted) return;
 
   final count = session.classCount;
   final classesLabel = '$count aula${count == 1 ? '' : 's'}';

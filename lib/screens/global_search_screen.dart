@@ -110,7 +110,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 28),
                         itemCount: hits.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 3),
+                        separatorBuilder: (_, _) => const SizedBox(height: 3),
                         itemBuilder: (_, index) => _SearchResultTile(hit: hits[index]),
                       ),
               ),
