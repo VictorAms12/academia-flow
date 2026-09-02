@@ -1,0 +1,198 @@
+name: One-shot source polish patch
+
+on:
+  push:
+    branches: [fix/polimento-p0-p2]
+    paths:
+      - '.github/run-polish-source-patch.trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/polimento-p0-p2
+
+      - name: Apply deterministic source patches
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # ---------- AppState: faster startup, deduplicated creates, truthful completion metric ----------
+          replace_once(
+              'lib/state/app_state.dart',
+              "import 'package:flutter/material.dart';",
+              "import 'dart:async';\n\nimport 'package:flutter/material.dart';",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "  final Map<int, int> _baselineAbsences = {};\n\n  bool get onboardingComplete",
+              "  final Map<int, int> _baselineAbsences = {};\n  final Map<String, Future<dynamic>> _pendingCreates = {};\n\n  bool get onboardingComplete",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "    await reloadAll(notify: false);\n    await ensureRoutineSessions(notify: false);\n    notifications.onRoutineAction = _handleRoutineAction;\n    notifications.onNotificationTap = _handleNotificationTap;\n    await notifications.initialize();\n    await _rescheduleNotifications();\n  }\n\n  Future<void> reloadAll",
+              "    await reloadAll(notify: false);\n    notifications.onRoutineAction = _handleRoutineAction;\n    notifications.onNotificationTap = _handleNotificationTap;\n    await notifications.initialize();\n    unawaited(_finishStartupWork());\n  }\n\n  Future<void> _finishStartupWork() async {\n    try {\n      await ensureRoutineSessions();\n      await _rescheduleNotifications();\n    } catch (error) {\n      notifications.lastError = 'Falha ao concluir tarefas pós-inicialização: $error';\n    }\n  }\n\n  Future<void> reloadAll",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "  void setIndex(int index) {\n    currentIndex = index.clamp(0, 4).toInt();\n    notifyListeners();\n  }\n\n  void setKanbanMode(bool value) {\n    kanbanMode = value;\n    notifyListeners();\n  }",
+              "  void setIndex(int index) {\n    final next = index.clamp(0, 4).toInt();\n    if (currentIndex == next) return;\n    currentIndex = next;\n    notifyListeners();\n  }\n\n  void setKanbanMode(bool value) {\n    if (kanbanMode == value) return;\n    kanbanMode = value;\n    notifyListeners();\n  }",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "  String subjectName(int? id) => subjectById(id)?.name ?? 'Sem matéria';",
+              "  Future<T> _runCreateOnce<T>(String key, Future<T> Function() action) async {\n    final existing = _pendingCreates[key];\n    if (existing != null) return await existing as T;\n    final future = action();\n    _pendingCreates[key] = future;\n    try {\n      return await future;\n    } finally {\n      if (identical(_pendingCreates[key], future)) _pendingCreates.remove(key);\n    }\n  }\n\n  String subjectName(int? id) => subjectById(id)?.name ?? 'Sem matéria';",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "  double get onTimeTaskRate => taskCompletionRate;",
+              "  double? get onTimeTaskRate {\n    final measured = tasks.where((task) => task.status == TaskStatus.done && task.completedAt != null).toList();\n    if (measured.isEmpty) return null;\n    final onTime = measured.where((task) {\n      final due = task.dueDate;\n      final hasExplicitTime = due.hour != 0 || due.minute != 0 || due.second != 0 || due.millisecond != 0;\n      final deadline = hasExplicitTime\n          ? due\n          : DateTime(due.year, due.month, due.day, 23, 59, 59, 999);\n      return !task.completedAt!.isAfter(deadline);\n    }).length;\n    return onTime / measured.length * 100;\n  }",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "    final saved = await _db.saveSubject(item);",
+              "    final saved = item.id == null\n        ? await _runCreateOnce('subject:${item.toMap()}', () => _db.saveSubject(item))\n        : await _db.saveSubject(item);",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "    final previous = _taskById(item.id);\n    if (item.id != null && item.sessionId == null && previous?.sessionId != null) {\n      item = item.copyWith(sessionId: previous!.sessionId);\n    }\n    final saved = await _db.saveTask(item);",
+              "    final previous = _taskById(item.id);\n    if (item.id != null && item.sessionId == null && previous?.sessionId != null) {\n      item = item.copyWith(sessionId: previous!.sessionId);\n    }\n    if (item.status == TaskStatus.done && item.completedAt == null && previous?.status != TaskStatus.done) {\n      item = item.copyWith(completedAt: DateTime.now());\n    } else if (item.status != TaskStatus.done && item.completedAt != null) {\n      item = item.copyWith(clearCompletedAt: true);\n    }\n    final saved = item.id == null\n        ? await _runCreateOnce('task:${item.toMap()}', () => _db.saveTask(item))\n        : await _db.saveTask(item);",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "    final v = await _db.saveGrade(item);\n    grades = await _db.getGrades();",
+              "    final v = item.id == null\n        ? await _runCreateOnce('grade:${item.toMap()}', () => _db.saveGrade(item))\n        : await _db.saveGrade(item);\n    grades = await _db.getGrades();",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "    final v = await _db.saveSchedule(item);\n    schedules = await _db.getSchedules();",
+              "    final v = item.id == null\n        ? await _runCreateOnce('schedule:${item.toMap()}', () => _db.saveSchedule(item))\n        : await _db.saveSchedule(item);\n    schedules = await _db.getSchedules();",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "    final saved = await _db.saveClassSession(item);\n    classSessions = await _db.getClassSessions();",
+              "    final saved = item.id == null\n        ? await _runCreateOnce('session:${item.toMap()}', () => _db.saveClassSession(item))\n        : await _db.saveClassSession(item);\n    classSessions = await _db.getClassSessions();",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "    final saved = await _db.saveCalendarEvent(item);\n    calendarEvents = await _db.getCalendarEvents();",
+              "    final saved = item.id == null\n        ? await _runCreateOnce('calendar:${item.toMap()}', () => _db.saveCalendarEvent(item))\n        : await _db.saveCalendarEvent(item);\n    calendarEvents = await _db.getCalendarEvents();",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "    final v = await _db.saveNote(item);\n    notes = await _db.getNotes();",
+              "    final v = item.id == null\n        ? await _runCreateOnce('note:${item.toMap()}', () => _db.saveNote(item))\n        : await _db.saveNote(item);\n    notes = await _db.getNotes();",
+          )
+          replace_once(
+              'lib/state/app_state.dart',
+              "    final v = await _db.saveMaterial(item);\n    materials = await _db.getMaterials();",
+              "    final v = item.id == null\n        ? await _runCreateOnce('material:${item.toMap()}', () => _db.saveMaterial(item))\n        : await _db.saveMaterial(item);\n    materials = await _db.getMaterials();",
+          )
+
+          # ---------- Task completion timestamp ----------
+          replace_once(
+              'lib/models/models.dart',
+              "  final double? minAttendance;\n\n  double get attendance {",
+              "  final double? minAttendance;\n\n  bool get hasAttendanceHistory => totalClasses > 0;\n\n  double get attendance {",
+          )
+          replace_once(
+              'lib/models/models.dart',
+              "    this.completedSteps = const [],\n    this.sessionId,\n  });",
+              "    this.completedSteps = const [],\n    this.sessionId,\n    this.completedAt,\n  });",
+          )
+          replace_once(
+              'lib/models/models.dart',
+              "  final List<int> completedSteps;\n  final int? sessionId;",
+              "  final List<int> completedSteps;\n  final int? sessionId;\n  final DateTime? completedAt;",
+          )
+          replace_once(
+              'lib/models/models.dart',
+              "    int? sessionId,\n    bool clearSession = false,\n  }) =>",
+              "    int? sessionId,\n    bool clearSession = false,\n    DateTime? completedAt,\n    bool clearCompletedAt = false,\n  }) =>",
+          )
+          replace_once(
+              'lib/models/models.dart',
+              "        completedSteps: completedSteps ?? this.completedSteps,\n        sessionId: clearSession ? null : sessionId ?? this.sessionId,\n      );",
+              "        completedSteps: completedSteps ?? this.completedSteps,\n        sessionId: clearSession ? null : sessionId ?? this.sessionId,\n        completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,\n      );",
+          )
+          replace_once(
+              'lib/models/models.dart',
+              "        'completed_steps': jsonEncode(completedSteps),\n        'session_id': sessionId,",
+              "        'completed_steps': jsonEncode(completedSteps),\n        'session_id': sessionId,\n        'completed_at': completedAt?.toIso8601String(),",
+          )
+          replace_once(
+              'lib/models/models.dart',
+              "      completedSteps: completed,\n      sessionId: map['session_id'] as int?,\n    );",
+              "      completedSteps: completed,\n      sessionId: map['session_id'] as int?,\n      completedAt: map['completed_at'] == null ? null : DateTime.tryParse('${map['completed_at']}'),\n    );",
+          )
+
+          # ---------- SQLite migration ----------
+          replace_once('lib/data/app_database.dart', '      version: 4,', '      version: 5,')
+          replace_once(
+              'lib/data/app_database.dart',
+              "      completed_steps TEXT NOT NULL DEFAULT '[]',\n      session_id INTEGER,",
+              "      completed_steps TEXT NOT NULL DEFAULT '[]',\n      session_id INTEGER,\n      completed_at TEXT,",
+          )
+          replace_once(
+              'lib/data/app_database.dart',
+              "    if (oldVersion < 4) {\n      await _detachOrphanSessionLinks(db);\n      await _createIndexes(db);\n    }\n  }",
+              "    if (oldVersion < 4) {\n      await _detachOrphanSessionLinks(db);\n      await _createIndexes(db);\n    }\n    if (oldVersion < 5) {\n      await db.execute('ALTER TABLE tasks ADD COLUMN completed_at TEXT');\n    }\n  }",
+          )
+
+          # ---------- Attendance empty-state semantics ----------
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "                        _Metric(label: 'Frequência', value: '${subject.attendance.toStringAsFixed(0)}%'),",
+              "                        _Metric(label: 'Frequência', value: subject.hasAttendanceHistory ? '${subject.attendance.toStringAsFixed(0)}%' : '—'),",
+          )
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "              Expanded(child: Text('${subject.attendance.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900))),",
+              "              Expanded(child: Text(subject.hasAttendanceHistory ? '${subject.attendance.toStringAsFixed(1)}%' : '—', style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900))),",
+          )
+          replace_once(
+              'lib/screens/subject_detail_screen.dart',
+              "            LinearProgressIndicator(value: subject.attendance / 100, minHeight: 8, borderRadius: BorderRadius.circular(20), color: subject.attendance < target ? AppColors.danger : AppColors.success),",
+              "            LinearProgressIndicator(value: subject.hasAttendanceHistory ? subject.attendance / 100 : 0, minHeight: 8, borderRadius: BorderRadius.circular(20), color: subject.hasAttendanceHistory && subject.attendance < target ? AppColors.danger : AppColors.success),",
+          )
+          replace_once(
+              'lib/screens/routine_screen.dart',
+              "    final risk = state.attendanceRiskLabel(subject);\n    final riskColor = switch (risk) { 'SEGURO' => AppColors.success, 'ATENÇÃO' => AppColors.gold, 'RISCO' => Colors.orange, _ => AppColors.danger };",
+              "    final risk = subject.hasAttendanceHistory ? state.attendanceRiskLabel(subject) : 'SEM DADOS';\n    final riskColor = switch (risk) { 'SEGURO' => AppColors.success, 'ATENÇÃO' => AppColors.gold, 'RISCO' => Colors.orange, 'SEM DADOS' => Theme.of(context).colorScheme.outline, _ => AppColors.danger };",
+          )
+          replace_once(
+              'lib/screens/routine_screen.dart',
+              "      Text('${attendance.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),\n      Text('meta ${target.toStringAsFixed(0)}% • ${state.completedClassCount(subject)} aulas registradas', style: Theme.of(context).textTheme.bodySmall),\n      const SizedBox(height: 8),\n      LinearProgressIndicator(value: (attendance / 100).clamp(0, 1), minHeight: 7, borderRadius: BorderRadius.circular(20)),",
+              "      Text(subject.hasAttendanceHistory ? '${attendance.toStringAsFixed(1)}%' : '—', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),\n      Text(subject.hasAttendanceHistory ? 'meta ${target.toStringAsFixed(0)}% • ${state.completedClassCount(subject)} aulas registradas' : 'Nenhuma aula registrada ainda', style: Theme.of(context).textTheme.bodySmall),\n      const SizedBox(height: 8),\n      LinearProgressIndicator(value: subject.hasAttendanceHistory ? (attendance / 100).clamp(0, 1) : 0, minHeight: 7, borderRadius: BorderRadius.circular(20)),",
+          )
+
+          print('Patches de persistência, startup e frequência aplicados com sucesso.')
+          PY
+
+      - name: Commit patched sources
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração pendente."
+            exit 0
+          fi
+          git commit -m "fix: harden persistence and academic state"
+          git push origin HEAD:fix/polimento-p0-p2
