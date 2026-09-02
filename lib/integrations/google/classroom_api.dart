@@ -18,7 +18,7 @@ class ClassroomApi {
         'studentId': 'me',
         'courseStates': 'ACTIVE',
         'pageSize': '100',
-        if (pageToken != null) 'pageToken': pageToken,
+        'pageToken': ?pageToken,
       };
       final json = await _getJson(
         Uri.https('classroom.googleapis.com', '/v1/courses', query),
@@ -39,7 +39,7 @@ class ClassroomApi {
       final query = <String, String>{
         'pageSize': '100',
         'orderBy': 'dueDate asc,updateTime desc',
-        if (pageToken != null) 'pageToken': pageToken,
+        'pageToken': ?pageToken,
       };
       final json = await _getJson(
         Uri.https('classroom.googleapis.com', '/v1/courses/$courseId/courseWork', query),
@@ -60,7 +60,7 @@ class ClassroomApi {
       final query = <String, String>{
         'userId': 'me',
         'pageSize': '100',
-        if (pageToken != null) 'pageToken': pageToken,
+        'pageToken': ?pageToken,
       };
       final json = await _getJson(
         Uri.https(

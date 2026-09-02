@@ -344,7 +344,7 @@ class _InsightsTab extends StatelessWidget {
         final cards = [
           _InsightCard(icon: Icons.calendar_view_week_rounded, title: 'Esta semana', value: '${week['present'] ?? 0}/${week['classes'] ?? 0}', subtitle: '${week['absent'] ?? 0} faltas • ${week['pending'] ?? 0} pendentes'),
           _InsightCard(icon: Icons.how_to_reg_rounded, title: 'Presença geral', value: '${overall.toStringAsFixed(1)}%', subtitle: '$resolved aulas confirmadas'),
-          _InsightCard(icon: Icons.task_alt_rounded, title: 'Atividades concluídas', value: '${state.onTimeTaskRate.toStringAsFixed(0)}%', subtitle: '${state.completedCount}/${state.tasks.length} concluídas'),
+          _InsightCard(icon: Icons.task_alt_rounded, title: 'Entregas no prazo', value: state.onTimeTaskRate == null ? '—' : '${state.onTimeTaskRate!.toStringAsFixed(0)}%', subtitle: '${state.completedCount}/${state.tasks.length} concluídas'),
           if (state.streakEnabled) _InsightCard(icon: Icons.local_fire_department_rounded, title: 'Sequência', value: '${state.attendanceStreak}', subtitle: 'aulas consecutivas presentes'),
         ];
         final cols = c.maxWidth >= 900 ? 4 : c.maxWidth >= 600 ? 2 : 1;

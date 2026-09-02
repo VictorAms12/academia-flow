@@ -219,6 +219,7 @@ class _TaskCardState extends State<_TaskCard> {
                   if (value == 'todo') await _move(task, TaskStatus.todo);
                   if (value == 'doing') await _move(task, TaskStatus.doing);
                   if (value == 'done') await _complete(task);
+                  if (!mounted) return;
                   if (value == 'delete' && await confirmDelete(context, task.title)) await widget.state.deleteTask(task);
                 },
                 itemBuilder: (_) => const [

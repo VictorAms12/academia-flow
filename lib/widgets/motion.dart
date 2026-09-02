@@ -84,7 +84,7 @@ class AnimatedNumber extends StatelessWidget {
       tween: Tween<double>(begin: 0, end: value),
       duration: duration,
       curve: MotionSpec.curve,
-      builder: (_, v, __) => Text('$prefix${v.toStringAsFixed(decimals)}$suffix', style: style),
+      builder: (_, v, _) => Text('$prefix${v.toStringAsFixed(decimals)}$suffix', style: style),
     );
   }
 }
@@ -111,7 +111,7 @@ class MotionProgress extends StatelessWidget {
       tween: Tween<double>(begin: 0, end: target),
       duration: duration,
       curve: MotionSpec.curve,
-      builder: (_, v, __) => LinearProgressIndicator(value: v, minHeight: minHeight, borderRadius: BorderRadius.circular(20)),
+      builder: (_, v, _) => LinearProgressIndicator(value: v, minHeight: minHeight, borderRadius: BorderRadius.circular(20)),
     );
   }
 }
@@ -121,7 +121,7 @@ Route<T> motionRoute<T>(Widget page, {RouteSettings? settings}) {
     settings: settings,
     transitionDuration: MotionSpec.normal,
     reverseTransitionDuration: MotionSpec.fast,
-    pageBuilder: (_, animation, __) => page,
+    pageBuilder: (_, _, _) => page,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return child;
       final curved = CurvedAnimation(parent: animation, curve: MotionSpec.curve, reverseCurve: Curves.easeInCubic);

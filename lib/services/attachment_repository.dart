@@ -103,7 +103,7 @@ class AttachmentRepository {
     if (files.isEmpty) return const [];
     final added = <AcademicAttachment>[];
     for (final picked in files) {
-      _ensureAllowedSize(picked.size, picked.name);
+      _ensureAllowedSize(await picked.length(), picked.name);
       final sourcePath = picked.path;
       if (sourcePath != null && sourcePath.trim().isNotEmpty) {
         final source = File(sourcePath);
@@ -149,7 +149,7 @@ class AttachmentRepository {
     required AttachmentTarget target,
   }) async {
     await initialize();
-    _ensureAllowedSize(picked.size, picked.name);
+    _ensureAllowedSize(await picked.length(), picked.name);
     final originalName = _safeName(picked.name);
     final uniqueName = '${DateTime.now().microsecondsSinceEpoch}_$originalName';
     final destination = File(p.join(_root!.path, uniqueName));

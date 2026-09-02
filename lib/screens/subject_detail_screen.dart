@@ -183,6 +183,7 @@ class _ClassesTab extends StatelessWidget {
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showScheduleEditor(context, state, entry: entry);
+                      if (!context.mounted) return;
                       if (value == 'delete' && await confirmDelete(context, 'horário de ${dayName(entry.day)}')) await state.deleteSchedule(entry);
                     },
                     itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Excluir'))],
@@ -269,6 +270,7 @@ class _SubjectTaskCard extends StatelessWidget {
           PopupMenuButton<String>(
             onSelected: (value) async {
               if (value == 'edit') await showTaskEditor(context, state, task: task);
+              if (!context.mounted) return;
               if (value == 'attachments' && task.id != null) {
                 await showAttachmentManager(
                   context,
@@ -276,6 +278,7 @@ class _SubjectTaskCard extends StatelessWidget {
                   title: task.title,
                 );
               }
+              if (!context.mounted) return;
               if (value == 'delete' && await confirmDelete(context, task.title)) await state.deleteTask(task);
             },
             itemBuilder: (_) => [
@@ -360,6 +363,7 @@ class _GradesTab extends StatelessWidget {
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showGradeEditor(context, state, grade: grade);
+                      if (!context.mounted) return;
                       if (value == 'delete' && await confirmDelete(context, grade.title)) await state.deleteGrade(grade);
                     },
                     itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Excluir'))],
@@ -424,6 +428,7 @@ class _ResourcesTab extends StatelessWidget {
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showMaterialEditor(context, state, material: material);
+                      if (!context.mounted) return;
                       if (value == 'attachments' && material.id != null) {
                         await showAttachmentManager(
                           context,
@@ -431,6 +436,7 @@ class _ResourcesTab extends StatelessWidget {
                           title: material.title,
                         );
                       }
+                      if (!context.mounted) return;
                       if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);
                     },
                     itemBuilder: (_) => [
@@ -489,6 +495,7 @@ class _ResourcesTab extends StatelessWidget {
                   PopupMenuButton<String>(
                     onSelected: (value) async {
                       if (value == 'edit') await showNoteEditor(context, state, note: note);
+                      if (!context.mounted) return;
                       if (value == 'attachments' && note.id != null) {
                         await showAttachmentManager(
                           context,
@@ -496,6 +503,7 @@ class _ResourcesTab extends StatelessWidget {
                           title: note.title,
                         );
                       }
+                      if (!context.mounted) return;
                       if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);
                     },
                     itemBuilder: (_) => [

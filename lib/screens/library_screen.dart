@@ -342,6 +342,7 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
                             ));
                           }
                           if (value == 'open' && _canOpen(note.link)) await launchUrl(Uri.parse(note.link), mode: LaunchMode.externalApplication);
+                          if (!context.mounted) return;
                           if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);
                         },
                         itemBuilder: (_) => [
@@ -449,6 +450,7 @@ class _LibraryScreenState extends State<LibraryScreen> with SingleTickerProvider
                 PopupMenuButton<String>(
                   onSelected: (value) async {
                     if (value == 'edit') await showMaterialEditor(context, state, material: material);
+                    if (!context.mounted) return;
                     if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);
                   },
                   itemBuilder: (_) => const [

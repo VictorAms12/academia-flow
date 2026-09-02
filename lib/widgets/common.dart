@@ -23,7 +23,7 @@ class SectionTitle extends StatelessWidget {
                   ),
             ),
           ),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );
@@ -229,7 +229,7 @@ class PageHeader extends StatelessWidget {
               ],
             ),
           ),
-          if (action != null) action!,
+          ?action,
         ],
       ),
     );
