@@ -13,7 +13,7 @@ class AppDatabase {
     final path = p.join(base, 'academia_flow_v2.db');
     _database = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -85,6 +85,7 @@ class AppDatabase {
       checklist TEXT NOT NULL DEFAULT '[]',
       completed_steps TEXT NOT NULL DEFAULT '[]',
       session_id INTEGER,
+      completed_at TEXT,
       FOREIGN KEY(subject_id) REFERENCES subjects(id) ON DELETE SET NULL
     )''');
     await db.execute('''CREATE TABLE grades(
@@ -179,6 +180,9 @@ class AppDatabase {
     if (oldVersion < 4) {
       await _detachOrphanSessionLinks(db);
       await _createIndexes(db);
+    }
+    if (oldVersion < 5) {
+      await db.execute('ALTER TABLE tasks ADD COLUMN completed_at TEXT');
     }
   }
 

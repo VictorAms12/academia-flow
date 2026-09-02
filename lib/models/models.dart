@@ -21,6 +21,8 @@ class Subject {
   final int absences;
   final double? minAttendance;
 
+  bool get hasAttendanceHistory => totalClasses > 0;
+
   double get attendance {
     if (totalClasses <= 0) return 100;
     final present = (totalClasses - absences).clamp(0, totalClasses).toInt();
@@ -90,6 +92,7 @@ class AcademicTask {
     this.checklist = const [],
     this.completedSteps = const [],
     this.sessionId,
+    this.completedAt,
   });
 
   final int? id;
@@ -104,6 +107,7 @@ class AcademicTask {
   final List<String> checklist;
   final List<int> completedSteps;
   final int? sessionId;
+  final DateTime? completedAt;
 
   AcademicTask copyWith({
     int? id,
@@ -120,6 +124,8 @@ class AcademicTask {
     List<int>? completedSteps,
     int? sessionId,
     bool clearSession = false,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
   }) =>
       AcademicTask(
         id: id ?? this.id,
@@ -134,6 +140,7 @@ class AcademicTask {
         checklist: checklist ?? this.checklist,
         completedSteps: completedSteps ?? this.completedSteps,
         sessionId: clearSession ? null : sessionId ?? this.sessionId,
+        completedAt: clearCompletedAt ? null : completedAt ?? this.completedAt,
       );
 
   Map<String, Object?> toMap() => {
@@ -149,6 +156,7 @@ class AcademicTask {
         'checklist': jsonEncode(checklist),
         'completed_steps': jsonEncode(completedSteps),
         'session_id': sessionId,
+        'completed_at': completedAt?.toIso8601String(),
       };
 
   factory AcademicTask.fromMap(Map<String, Object?> map) {
@@ -171,6 +179,7 @@ class AcademicTask {
       checklist: checklist,
       completedSteps: completed,
       sessionId: map['session_id'] as int?,
+      completedAt: map['completed_at'] == null ? null : DateTime.tryParse('${map['completed_at']}'),
     );
   }
 }

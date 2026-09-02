@@ -78,7 +78,7 @@ class _SubjectDetailScreenState extends State<SubjectDetailScreen> with SingleTi
                       final metrics = Row(mainAxisSize: MainAxisSize.min, children: [
                         _Metric(label: 'Média', value: avg == null ? '—' : avg.toStringAsFixed(1)),
                         const SizedBox(width: 22),
-                        _Metric(label: 'Frequência', value: '${subject.attendance.toStringAsFixed(0)}%'),
+                        _Metric(label: 'Frequência', value: subject.hasAttendanceHistory ? '${subject.attendance.toStringAsFixed(0)}%' : '—'),
                         const SizedBox(width: 22),
                         _Metric(label: 'Faltas', value: '${subject.absences}'),
                       ]);
@@ -196,11 +196,11 @@ class _ClassesTab extends StatelessWidget {
         SoftCard(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Expanded(child: Text('${subject.attendance.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900))),
+              Expanded(child: Text(subject.hasAttendanceHistory ? '${subject.attendance.toStringAsFixed(1)}%' : '—', style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900))),
               GoldBadge('${subject.absences} FALTA${subject.absences == 1 ? '' : 'S'}'),
             ]),
             const SizedBox(height: 9),
-            LinearProgressIndicator(value: subject.attendance / 100, minHeight: 8, borderRadius: BorderRadius.circular(20), color: subject.attendance < target ? AppColors.danger : AppColors.success),
+            LinearProgressIndicator(value: subject.hasAttendanceHistory ? subject.attendance / 100 : 0, minHeight: 8, borderRadius: BorderRadius.circular(20), color: subject.hasAttendanceHistory && subject.attendance < target ? AppColors.danger : AppColors.success),
             const SizedBox(height: 9),
             Text(
               subject.totalClasses == 0

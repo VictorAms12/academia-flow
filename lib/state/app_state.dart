@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../data/app_database.dart';
 import '../models/models.dart';
@@ -35,6 +37,7 @@ class AppState extends ChangeNotifier {
 
   final Map<int, int> _baselineTotalClasses = {};
   final Map<int, int> _baselineAbsences = {};
+  final Map<String, Future<dynamic>> _pendingCreates = {};
 
   bool get onboardingComplete => userName.trim().isNotEmpty && course.trim().isNotEmpty;
 
@@ -55,11 +58,19 @@ class AppState extends ChangeNotifier {
     streakEnabled = (settings['attendance_streak'] ?? 'true') == 'true';
 
     await reloadAll(notify: false);
-    await ensureRoutineSessions(notify: false);
     notifications.onRoutineAction = _handleRoutineAction;
     notifications.onNotificationTap = _handleNotificationTap;
     await notifications.initialize();
-    await _rescheduleNotifications();
+    unawaited(_finishStartupWork());
+  }
+
+  Future<void> _finishStartupWork() async {
+    try {
+      await ensureRoutineSessions();
+      await _rescheduleNotifications();
+    } catch (error) {
+      notifications.lastError = 'Falha ao concluir tarefas pós-inicialização: $error';
+    }
   }
 
   Future<void> reloadAll({bool notify = true}) async {
@@ -166,11 +177,14 @@ class AppState extends ChangeNotifier {
   }
 
   void setIndex(int index) {
-    currentIndex = index.clamp(0, 4).toInt();
+    final next = index.clamp(0, 4).toInt();
+    if (currentIndex == next) return;
+    currentIndex = next;
     notifyListeners();
   }
 
   void setKanbanMode(bool value) {
+    if (kanbanMode == value) return;
     kanbanMode = value;
     notifyListeners();
   }
@@ -221,6 +235,18 @@ class AppState extends ChangeNotifier {
       if (item.id == id) return item;
     }
     return null;
+  }
+
+  Future<T> _runCreateOnce<T>(String key, Future<T> Function() action) async {
+    final existing = _pendingCreates[key];
+    if (existing != null) return await existing as T;
+    final future = action();
+    _pendingCreates[key] = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_pendingCreates[key], future)) _pendingCreates.remove(key);
+    }
   }
 
   String subjectName(int? id) => subjectById(id)?.name ?? 'Sem matéria';
@@ -374,7 +400,19 @@ class AppState extends ChangeNotifier {
     return done / tasks.length * 100;
   }
 
-  double get onTimeTaskRate => taskCompletionRate;
+  double? get onTimeTaskRate {
+    final measured = tasks.where((task) => task.status == TaskStatus.done && task.completedAt != null).toList();
+    if (measured.isEmpty) return null;
+    final onTime = measured.where((task) {
+      final due = task.dueDate;
+      final hasExplicitTime = due.hour != 0 || due.minute != 0 || due.second != 0 || due.millisecond != 0;
+      final deadline = hasExplicitTime
+          ? due
+          : DateTime(due.year, due.month, due.day, 23, 59, 59, 999);
+      return !task.completedAt!.isAfter(deadline);
+    }).length;
+    return onTime / measured.length * 100;
+  }
 
   Future<Subject> saveSubject(Subject item, {bool preserveRoutineFields = true}) async {
     final existing = subjectById(item.id);
@@ -395,7 +433,9 @@ class AppState extends ChangeNotifier {
         minAttendance: preserveRoutineFields ? item.minAttendance ?? existing.minAttendance : item.minAttendance,
       );
     }
-    final saved = await _db.saveSubject(item);
+    final saved = item.id == null
+        ? await _runCreateOnce('subject:${item.toMap()}', () => _db.saveSubject(item))
+        : await _db.saveSubject(item);
     final rawSubjects = await _db.getSubjects();
     _captureSubjectBaselines(rawSubjects);
     subjects = rawSubjects;
@@ -436,7 +476,14 @@ class AppState extends ChangeNotifier {
     if (item.id != null && item.sessionId == null && previous?.sessionId != null) {
       item = item.copyWith(sessionId: previous!.sessionId);
     }
-    final saved = await _db.saveTask(item);
+    if (item.status == TaskStatus.done && item.completedAt == null && previous?.status != TaskStatus.done) {
+      item = item.copyWith(completedAt: DateTime.now());
+    } else if (item.status != TaskStatus.done && item.completedAt != null) {
+      item = item.copyWith(clearCompletedAt: true);
+    }
+    final saved = item.id == null
+        ? await _runCreateOnce('task:${item.toMap()}', () => _db.saveTask(item))
+        : await _db.saveTask(item);
     if (reload) tasks = await _db.getTasks();
     if (scheduleNotification) await notifications.scheduleTask(saved, subjectName(saved.subjectId));
     if (notify) notifyListeners();
@@ -469,7 +516,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<Grade> saveGrade(Grade item) async {
-    final v = await _db.saveGrade(item);
+    final v = item.id == null
+        ? await _runCreateOnce('grade:${item.toMap()}', () => _db.saveGrade(item))
+        : await _db.saveGrade(item);
     grades = await _db.getGrades();
     notifyListeners();
     return v;
@@ -485,7 +534,9 @@ class AppState extends ChangeNotifier {
   Future<ScheduleEntry> saveSchedule(ScheduleEntry item) async {
     _validateSchedule(item.day, item.start, item.end);
     if (item.id != null) await _db.deleteFutureSessionsForSchedule(item.id!, DateTime.now());
-    final v = await _db.saveSchedule(item);
+    final v = item.id == null
+        ? await _runCreateOnce('schedule:${item.toMap()}', () => _db.saveSchedule(item))
+        : await _db.saveSchedule(item);
     schedules = await _db.getSchedules();
     classSessions = await _db.getClassSessions();
     await ensureRoutineSessions(notify: false);
@@ -570,7 +621,9 @@ class AppState extends ChangeNotifier {
 
   Future<ClassSession> saveClassSession(ClassSession item) async {
     _validateSchedule(item.date.weekday, item.start, item.end);
-    final saved = await _db.saveClassSession(item);
+    final saved = item.id == null
+        ? await _runCreateOnce('session:${item.toMap()}', () => _db.saveClassSession(item))
+        : await _db.saveClassSession(item);
     classSessions = await _db.getClassSessions();
     _projectAttendanceIntoSubjects();
     await _rescheduleNotifications();
@@ -614,7 +667,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<AcademicCalendarEvent> saveCalendarEvent(AcademicCalendarEvent item) async {
-    final saved = await _db.saveCalendarEvent(item);
+    final saved = item.id == null
+        ? await _runCreateOnce('calendar:${item.toMap()}', () => _db.saveCalendarEvent(item))
+        : await _db.saveCalendarEvent(item);
     calendarEvents = await _db.getCalendarEvents();
     var detachedLinks = false;
     if (saved.blocksClasses) {
@@ -666,7 +721,9 @@ class AppState extends ChangeNotifier {
         sessionId: previous!.sessionId,
       );
     }
-    final v = await _db.saveNote(item);
+    final v = item.id == null
+        ? await _runCreateOnce('note:${item.toMap()}', () => _db.saveNote(item))
+        : await _db.saveNote(item);
     notes = await _db.getNotes();
     notifyListeners();
     return v;
@@ -693,7 +750,9 @@ class AppState extends ChangeNotifier {
         sessionId: previous!.sessionId,
       );
     }
-    final v = await _db.saveMaterial(item);
+    final v = item.id == null
+        ? await _runCreateOnce('material:${item.toMap()}', () => _db.saveMaterial(item))
+        : await _db.saveMaterial(item);
     materials = await _db.getMaterials();
     notifyListeners();
     return v;
