@@ -122,7 +122,8 @@ Route<T> motionRoute<T>(Widget page, {RouteSettings? settings}) {
     transitionDuration: MotionSpec.normal,
     reverseTransitionDuration: MotionSpec.fast,
     pageBuilder: (_, animation, __) => page,
-    transitionsBuilder: (_, animation, secondaryAnimation, child) {
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return child;
       final curved = CurvedAnimation(parent: animation, curve: MotionSpec.curve, reverseCurve: Curves.easeInCubic);
       final fade = Tween<double>(begin: .35, end: 1).animate(curved);
       final slide = Tween<Offset>(begin: const Offset(.035, 0), end: Offset.zero).animate(curved);
