@@ -472,6 +472,9 @@ class AppState extends ChangeNotifier {
     bool scheduleNotification = true,
     bool notify = true,
   }) async {
+    final createKey = item.id == null
+        ? 'task:${item.title}|${item.subjectId}|${item.dueDate.toIso8601String()}|${item.priority.index}|${item.status.index}|${item.kind.index}|${item.reminderEnabled}|${item.description}|${item.checklist.join('\u001F')}|${item.sessionId}'
+        : null;
     final previous = _taskById(item.id);
     if (item.id != null && item.sessionId == null && previous?.sessionId != null) {
       item = item.copyWith(sessionId: previous!.sessionId);
@@ -482,7 +485,7 @@ class AppState extends ChangeNotifier {
       item = item.copyWith(clearCompletedAt: true);
     }
     final saved = item.id == null
-        ? await _runCreateOnce('task:${item.toMap()}', () => _db.saveTask(item))
+        ? await _runCreateOnce(createKey!, () => _db.saveTask(item))
         : await _db.saveTask(item);
     if (reload) tasks = await _db.getTasks();
     if (scheduleNotification) await notifications.scheduleTask(saved, subjectName(saved.subjectId));
@@ -621,8 +624,9 @@ class AppState extends ChangeNotifier {
 
   Future<ClassSession> saveClassSession(ClassSession item) async {
     _validateSchedule(item.date.weekday, item.start, item.end);
+    final createKey = 'session:${item.subjectId}|${item.scheduleId}|${_dateKey(item.date)}|${item.start}|${item.end}|${item.room}|${item.classCount}|${item.kind.index}|${item.makeupForSessionId}';
     final saved = item.id == null
-        ? await _runCreateOnce('session:${item.toMap()}', () => _db.saveClassSession(item))
+        ? await _runCreateOnce(createKey, () => _db.saveClassSession(item))
         : await _db.saveClassSession(item);
     classSessions = await _db.getClassSessions();
     _projectAttendanceIntoSubjects();
@@ -721,8 +725,9 @@ class AppState extends ChangeNotifier {
         sessionId: previous!.sessionId,
       );
     }
+    final createKey = 'note:${item.subjectId}|${item.title}|${item.content}|${item.link}|${item.tags}|${item.pinned}|${item.sessionId}';
     final v = item.id == null
-        ? await _runCreateOnce('note:${item.toMap()}', () => _db.saveNote(item))
+        ? await _runCreateOnce(createKey, () => _db.saveNote(item))
         : await _db.saveNote(item);
     notes = await _db.getNotes();
     notifyListeners();
@@ -750,8 +755,9 @@ class AppState extends ChangeNotifier {
         sessionId: previous!.sessionId,
       );
     }
+    final createKey = 'material:${item.subjectId}|${item.title}|${item.url}|${item.description}|${item.kind.index}|${item.sessionId}';
     final v = item.id == null
-        ? await _runCreateOnce('material:${item.toMap()}', () => _db.saveMaterial(item))
+        ? await _runCreateOnce(createKey, () => _db.saveMaterial(item))
         : await _db.saveMaterial(item);
     materials = await _db.getMaterials();
     notifyListeners();
