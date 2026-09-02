@@ -14,6 +14,7 @@ class AttachmentRepository {
   AttachmentRepository._();
 
   static final AttachmentRepository instance = AttachmentRepository._();
+  static const int maxAttachmentBytes = 50 * 1024 * 1024;
 
   final ImagePicker _imagePicker = ImagePicker();
   bool _initialized = false;
@@ -102,6 +103,7 @@ class AttachmentRepository {
     if (files.isEmpty) return const [];
     final added = <AcademicAttachment>[];
     for (final picked in files) {
+      _ensureAllowedSize(picked.size, picked.name);
       final sourcePath = picked.path;
       if (sourcePath != null && sourcePath.trim().isNotEmpty) {
         final source = File(sourcePath);
@@ -147,10 +149,12 @@ class AttachmentRepository {
     required AttachmentTarget target,
   }) async {
     await initialize();
+    _ensureAllowedSize(picked.size, picked.name);
     final originalName = _safeName(picked.name);
     final uniqueName = '${DateTime.now().microsecondsSinceEpoch}_$originalName';
     final destination = File(p.join(_root!.path, uniqueName));
     final bytes = await picked.readAsBytes();
+    _ensureAllowedSize(bytes.length, originalName);
     await destination.writeAsBytes(bytes, flush: true);
     return _recordImportedFile(
       destination,
@@ -168,6 +172,7 @@ class AttachmentRepository {
     if (!await source.exists()) throw StateError('O arquivo selecionado não está mais disponível.');
 
     final originalName = _safeName(preferredName?.trim().isNotEmpty == true ? preferredName!.trim() : p.basename(source.path));
+    _ensureAllowedSize(await source.length(), originalName);
     final uniqueName = '${DateTime.now().microsecondsSinceEpoch}_$originalName';
     final destination = File(p.join(_root!.path, uniqueName));
     await source.copy(destination.path);
@@ -184,6 +189,7 @@ class AttachmentRepository {
     required String originalName,
   }) async {
     final size = await destination.length();
+    _ensureAllowedSize(size, originalName);
     final kind = attachmentKindForName(originalName);
     final item = AcademicAttachment(
       targetType: target.type,
@@ -258,6 +264,12 @@ class AttachmentRepository {
         }
       }
     }
+  }
+
+  void _ensureAllowedSize(int size, String name) {
+    if (size <= maxAttachmentBytes) return;
+    final mb = (maxAttachmentBytes / (1024 * 1024)).round();
+    throw StateError('O anexo “$name” ultrapassa o limite de $mb MB.');
   }
 
   (String, int) _targetColumn(AttachmentTarget target) => switch (target.type) {
