@@ -1,0 +1,125 @@
+name: One-shot final context cleanup
+
+on:
+  push:
+    branches: [fix/polimento-p0-p2]
+    paths:
+      - '.github/run-final-context-cleanup.trigger'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/polimento-p0-p2
+
+      - name: Fix remaining BuildContext analyzer findings
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected 1 match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'lib/screens/library_screen.dart',
+              """                        onSelected: (value) async {
+                          if (value == 'pin') {
+                            await state.saveNote(AcademicNote(
+                              id: note.id,
+                              subjectId: note.subjectId,
+                              title: note.title,
+                              content: note.content,
+                              link: note.link,
+                              tags: note.tags,
+                              pinned: !note.pinned,
+                              createdAt: note.createdAt,
+                              sessionId: note.sessionId,
+                            ));
+                          }
+                          if (value == 'open' && _canOpen(note.link)) await launchUrl(Uri.parse(note.link), mode: LaunchMode.externalApplication);
+                          if (!context.mounted) return;
+                          if (value == 'delete' && await confirmDelete(context, note.title)) await state.deleteNote(note);
+                        },""",
+              """                        onSelected: (value) async {
+                          if (value == 'delete') {
+                            if (await confirmDelete(context, note.title)) await state.deleteNote(note);
+                            return;
+                          }
+                          if (value == 'pin') {
+                            await state.saveNote(AcademicNote(
+                              id: note.id,
+                              subjectId: note.subjectId,
+                              title: note.title,
+                              content: note.content,
+                              link: note.link,
+                              tags: note.tags,
+                              pinned: !note.pinned,
+                              createdAt: note.createdAt,
+                              sessionId: note.sessionId,
+                            ));
+                          }
+                          if (value == 'open' && _canOpen(note.link)) await launchUrl(Uri.parse(note.link), mode: LaunchMode.externalApplication);
+                        },""",
+          )
+
+          replace_once(
+              'lib/screens/library_screen.dart',
+              """                  onSelected: (value) async {
+                    if (value == 'edit') await showMaterialEditor(context, state, material: material);
+                    if (!context.mounted) return;
+                    if (value == 'delete' && await confirmDelete(context, material.title)) await state.deleteMaterial(material);
+                  },""",
+              """                  onSelected: (value) async {
+                    if (value == 'delete') {
+                      if (await confirmDelete(context, material.title)) await state.deleteMaterial(material);
+                      return;
+                    }
+                    if (value == 'edit') await showMaterialEditor(context, state, material: material);
+                  },""",
+          )
+
+          replace_once(
+              'lib/screens/tasks_screen.dart',
+              """                onSelected: (value) async {
+                  if (value == 'edit') await showTaskEditor(context, widget.state, task: task);
+                  if (value == 'todo') await _move(task, TaskStatus.todo);
+                  if (value == 'doing') await _move(task, TaskStatus.doing);
+                  if (value == 'done') await _complete(task);
+                  if (!mounted) return;
+                  if (value == 'delete' && await confirmDelete(context, task.title)) await widget.state.deleteTask(task);
+                },""",
+              """                onSelected: (value) async {
+                  if (value == 'delete') {
+                    if (await confirmDelete(context, task.title)) await widget.state.deleteTask(task);
+                    return;
+                  }
+                  if (value == 'edit') await showTaskEditor(context, widget.state, task: task);
+                  if (value == 'todo') await _move(task, TaskStatus.todo);
+                  if (value == 'doing') await _move(task, TaskStatus.doing);
+                  if (value == 'done') await _complete(task);
+                },""",
+          )
+
+          print('Remaining BuildContext findings fixed.')
+          PY
+
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/screens/library_screen.dart lib/screens/tasks_screen.dart
+          git commit -m "fix: resolve final BuildContext analyzer findings"
+          git push origin HEAD:fix/polimento-p0-p2
