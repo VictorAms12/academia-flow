@@ -38,6 +38,25 @@ class V26Controller extends ChangeNotifier {
 
   void bind(AppState state) => _state = state;
 
+  Future<void> clearAcademicState() async {
+    studyBlocks = [];
+    dismissedInsights = <String>{};
+    await Future.wait([
+      _db.setSetting('study_blocks_v26', '[]'),
+      _db.setSetting('dismissed_insights_v26', '[]'),
+    ]);
+    notifyListeners();
+  }
+
+  void resetLocalState() {
+    _state = null;
+    _initialized = false;
+    loading = false;
+    studyBlocks = [];
+    dismissedInsights = <String>{};
+    notifyListeners();
+  }
+
   List<StudyBlock> studyBlocksForDate(DateTime date) {
     final items = studyBlocks.where((block) => _sameDay(block.startsAt, date)).toList()
       ..sort((a, b) => a.startsAt.compareTo(b.startsAt));
