@@ -20,8 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      ACADEMIA_FLOW_STORE_PASSWORD: AcademiaFlow2026!
-      ACADEMIA_FLOW_KEY_PASSWORD: AcademiaFlow2026!
+      ACADEMIA_FLOW_KEYSTORE_B64: ${{ secrets.ACADEMIA_FLOW_KEYSTORE_B64 }}
+      ACADEMIA_FLOW_STORE_PASSWORD: ${{ secrets.ACADEMIA_FLOW_STORE_PASSWORD }}
+      ACADEMIA_FLOW_KEY_PASSWORD: ${{ secrets.ACADEMIA_FLOW_KEY_PASSWORD }}
 
     steps:
       - name: Checkout repository
@@ -33,19 +34,30 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Flutter stable
+      - name: Setup Flutter 3.47.0
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.0'
           channel: stable
           cache: true
 
       - name: Generate Android project files
         run: flutter create . --platforms=android
 
-      - name: Restore persistent signing key
-        run: base64 -d .github/signing/academia-flow.jks.b64 > android/app/academia-flow-upload.jks
+      - name: Prepare Android signing
+        shell: bash
+        run: |
+          if [[ -n "$ACADEMIA_FLOW_KEYSTORE_B64" && -n "$ACADEMIA_FLOW_STORE_PASSWORD" && -n "$ACADEMIA_FLOW_KEY_PASSWORD" ]]; then
+            printf '%s' "$ACADEMIA_FLOW_KEYSTORE_B64" | base64 --decode > android/app/academia-flow-upload.jks
+            echo "ACADEMIA_FLOW_RELEASE_SIGNING=true" >> "$GITHUB_ENV"
+            echo "Assinatura release carregada a partir de GitHub Actions Secrets."
+          else
+            echo "ACADEMIA_FLOW_RELEASE_SIGNING=false" >> "$GITHUB_ENV"
+            echo "::warning::Secrets de assinatura não configurados. O CI gerará um APK release instalável usando a assinatura de desenvolvimento criada pelo Flutter. Para releases atualizáveis, configure ACADEMIA_FLOW_KEYSTORE_B64, ACADEMIA_FLOW_STORE_PASSWORD e ACADEMIA_FLOW_KEY_PASSWORD."
+          fi
 
-      - name: Validate persistent signing key
+      - name: Validate release signing key
+        if: env.ACADEMIA_FLOW_RELEASE_SIGNING == 'true'
         run: |
           keytool -list \
             -keystore android/app/academia-flow-upload.jks \
@@ -101,7 +113,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze source
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+        run: flutter analyze
 
       - name: Run tests
         run: flutter test
