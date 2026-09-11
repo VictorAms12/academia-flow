@@ -3,64 +3,252 @@ import '../models/models.dart';
 import '../state/app_state.dart';
 import 'routine_dialogs.dart';
 
-Future<void> showExtraClassEditor(BuildContext context, AppState state, {ClassSessionKind kind = ClassSessionKind.extra, ClassSession? makeupFor}) async {
-  if (state.subjects.isEmpty) return;
-  int subjectId = makeupFor?.subjectId ?? state.subjects.first.id!;
-  DateTime date = DateTime.now().add(const Duration(days: 1));
-  TimeOfDay start = const TimeOfDay(hour: 19, minute: 0);
-  TimeOfDay end = const TimeOfDay(hour: 20, minute: 40);
-  int classCount = makeupFor?.classCount ?? 2;
-  final room = TextEditingController(text: makeupFor?.room ?? '');
+Future<ClassSession?> showExtraClassEditor(
+  BuildContext context,
+  AppState state, {
+  ClassSessionKind kind = ClassSessionKind.extra,
+  ClassSession? makeupFor,
+  ClassSession? existing,
+}) async {
+  if (state.subjects.isEmpty) return null;
+
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final resolvedKind = existing?.kind ?? kind;
+  final linkedOriginal = makeupFor ?? state.sessionById(existing?.makeupForSessionId);
+
+  int subjectId = existing?.subjectId ?? linkedOriginal?.subjectId ?? state.subjects.first.id!;
+  final linkedDate = linkedOriginal?.date;
+  DateTime date = existing?.date ??
+      (linkedDate != null && !DateTime(linkedDate.year, linkedDate.month, linkedDate.day).isBefore(today)
+          ? linkedDate
+          : today);
+  TimeOfDay start = _parseTime(existing?.start ?? linkedOriginal?.start, const TimeOfDay(hour: 19, minute: 0));
+  TimeOfDay end = _parseTime(existing?.end ?? linkedOriginal?.end, const TimeOfDay(hour: 20, minute: 40));
+  int classCount = existing?.classCount ?? linkedOriginal?.classCount ?? 2;
+  final room = TextEditingController(text: existing?.room ?? linkedOriginal?.room ?? '');
+  final note = TextEditingController(text: existing?.note ?? '');
+  var saving = false;
+  String? saveError;
 
   try {
-    await showDialog<void>(
+    final saved = await showDialog<ClassSession>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setLocal) => AlertDialog(
-          title: Text(kind == ClassSessionKind.makeup ? 'Reposição de aula' : 'Aula extraordinária'),
-          content: SizedBox(
-            width: 500,
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                DropdownButtonFormField<int>(initialValue: subjectId, decoration: const InputDecoration(labelText: 'Matéria'), items: state.subjects.map((s) => DropdownMenuItem(value: s.id!, child: Text(s.name))).toList(), onChanged: (v) => setLocal(() => subjectId = v ?? subjectId)),
-                const SizedBox(height: 12),
-                ListTile(contentPadding: EdgeInsets.zero, title: const Text('Data'), subtitle: Text(formatRoutineDate(date)), trailing: const Icon(Icons.calendar_month_rounded), onTap: () async {
-                  final selected = await showDatePicker(context: context, initialDate: date, firstDate: DateTime.now().subtract(const Duration(days: 30)), lastDate: DateTime(2100));
-                  if (selected != null) setLocal(() => date = selected);
-                }),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(child: _TimeBox(label: 'Início', time: start, onTap: () async { final v = await showTimePicker(context: context, initialTime: start); if (v != null) setLocal(() => start = v); })),
-                  const SizedBox(width: 10),
-                  Expanded(child: _TimeBox(label: 'Fim', time: end, onTap: () async { final v = await showTimePicker(context: context, initialTime: end); if (v != null) setLocal(() => end = v); })),
-                ]),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<int>(initialValue: classCount, decoration: const InputDecoration(labelText: 'Quantidade de aulas'), items: [for (var i = 1; i <= 6; i++) DropdownMenuItem(value: i, child: Text('$i'))], onChanged: (v) => setLocal(() => classCount = v ?? classCount)),
-                const SizedBox(height: 12),
-                TextFormField(controller: room, decoration: const InputDecoration(labelText: 'Sala / local')),
-              ]),
+        builder: (context, setLocal) => PopScope(
+          canPop: !saving,
+          child: AlertDialog(
+            title: Text(
+              existing != null
+                  ? (resolvedKind == ClassSessionKind.makeup ? 'Editar reposição' : 'Editar aula extra')
+                  : (resolvedKind == ClassSessionKind.makeup ? 'Reposição de aula' : 'Aula extra'),
             ),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (linkedOriginal != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: .07),
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.replay_rounded, size: 20),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: Text(
+                                'Reposição vinculada à aula de ${formatRoutineDate(linkedOriginal.date)} • ${linkedOriginal.start}–${linkedOriginal.end}. Você pode alterar a nova data e horário abaixo.',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 13),
+                    ],
+                    DropdownButtonFormField<int>(
+                      initialValue: subjectId,
+                      decoration: const InputDecoration(labelText: 'Matéria'),
+                      items: state.subjects
+                          .where((subject) => subject.id != null)
+                          .map((subject) => DropdownMenuItem(value: subject.id!, child: Text(subject.name)))
+                          .toList(),
+                      onChanged: saving ? null : (value) => setLocal(() => subjectId = value ?? subjectId),
+                    ),
+                    const SizedBox(height: 12),
+                    ListTile(
+                      enabled: !saving,
+                      contentPadding: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      title: const Text('Data'),
+                      subtitle: Text(formatRoutineDate(date)),
+                      trailing: const Icon(Icons.calendar_month_rounded),
+                      onTap: saving
+                          ? null
+                          : () async {
+                              final selected = await showDatePicker(
+                                context: context,
+                                initialDate: date,
+                                firstDate: DateTime(2000),
+                                lastDate: DateTime(2100),
+                              );
+                              if (selected != null) setLocal(() => date = selected);
+                            },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _TimeBox(
+                            label: 'Início',
+                            time: start,
+                            enabled: !saving,
+                            onTap: () async {
+                              final value = await showTimePicker(context: context, initialTime: start);
+                              if (value != null) setLocal(() => start = value);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _TimeBox(
+                            label: 'Fim',
+                            time: end,
+                            enabled: !saving,
+                            onTap: () async {
+                              final value = await showTimePicker(context: context, initialTime: end);
+                              if (value != null) setLocal(() => end = value);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<int>(
+                      initialValue: classCount,
+                      decoration: const InputDecoration(labelText: 'Quantidade de aulas'),
+                      items: [for (var i = 1; i <= 8; i++) DropdownMenuItem(value: i, child: Text('$i'))],
+                      onChanged: saving ? null : (value) => setLocal(() => classCount = value ?? classCount),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      enabled: !saving,
+                      controller: room,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(labelText: 'Sala / local'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      enabled: !saving,
+                      controller: note,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Observação',
+                        hintText: 'Ex.: aula colocada no lugar da aula cancelada',
+                      ),
+                    ),
+                    if (saveError != null) ...[
+                      const SizedBox(height: 11),
+                      Text(saveError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    ],
+                    if (saving) ...[
+                      const SizedBox(height: 13),
+                      const LinearProgressIndicator(),
+                      const SizedBox(height: 8),
+                      Text(
+                        existing == null ? 'Salvando aula e atualizando a rotina…' : 'Atualizando aula e rotina…',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
+              FilledButton.icon(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        if (_minutes(end) <= _minutes(start)) {
+                          setLocal(() => saveError = 'O horário final deve ser posterior ao horário inicial.');
+                          return;
+                        }
+                        setLocal(() {
+                          saving = true;
+                          saveError = null;
+                        });
+                        try {
+                          final draft = existing == null
+                              ? ClassSession(
+                                  subjectId: subjectId,
+                                  date: date,
+                                  start: _time(start),
+                                  end: _time(end),
+                                  room: room.text.trim(),
+                                  classCount: classCount,
+                                  kind: resolvedKind,
+                                  note: note.text.trim(),
+                                  makeupForSessionId: linkedOriginal?.id,
+                                  createdAt: DateTime.now(),
+                                )
+                              : existing.copyWith(
+                                  subjectId: subjectId,
+                                  date: date,
+                                  start: _time(start),
+                                  end: _time(end),
+                                  room: room.text.trim(),
+                                  classCount: classCount,
+                                  kind: resolvedKind,
+                                  note: note.text.trim(),
+                                  makeupForSessionId: linkedOriginal?.id,
+                                );
+                          final result = await state.saveClassSession(draft);
+                          if (dialogContext.mounted) Navigator.pop(dialogContext, result);
+                        } catch (error) {
+                          if (!dialogContext.mounted) return;
+                          setLocal(() {
+                            saving = false;
+                            saveError = 'Não foi possível salvar a aula: $error';
+                          });
+                        }
+                      },
+                icon: saving
+                    ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(existing == null ? Icons.add_rounded : Icons.save_outlined),
+                label: Text(saving ? 'Salvando…' : existing == null ? 'Adicionar' : 'Salvar alterações'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancelar')),
-            FilledButton(onPressed: () async {
-              if (_minutes(end) <= _minutes(start)) {
-                ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('O horário final deve ser posterior ao horário inicial.')));
-                return;
-              }
-              try {
-                await state.saveClassSession(ClassSession(subjectId: subjectId, date: date, start: _time(start), end: _time(end), room: room.text.trim(), classCount: classCount, kind: kind, makeupForSessionId: makeupFor?.id, createdAt: DateTime.now()));
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-              } catch (error) {
-                if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('Não foi possível adicionar a aula: $error')));
-              }
-            }, child: const Text('Adicionar')),
-          ],
         ),
       ),
     );
+
+    if (saved != null && context.mounted) {
+      final label = resolvedKind == ClassSessionKind.makeup ? 'Reposição' : 'Aula extra';
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: Text('$label ${existing == null ? 'adicionada' : 'atualizada'} • ${formatRoutineDate(saved.date)} às ${saved.start}.'),
+        ),
+      );
+    }
+    return saved;
   } finally {
     room.dispose();
+    note.dispose();
   }
 }
 
@@ -229,11 +417,31 @@ Future<void> showRoutineSettings(BuildContext context, AppState state) async {
 int _minutes(TimeOfDay t) => t.hour * 60 + t.minute;
 String _time(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
+TimeOfDay _parseTime(String? value, TimeOfDay fallback) {
+  if (value == null) return fallback;
+  final parts = value.split(':');
+  if (parts.length != 2) return fallback;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) return fallback;
+  return TimeOfDay(hour: hour, minute: minute);
+}
+
 class _TimeBox extends StatelessWidget {
-  const _TimeBox({required this.label, required this.time, required this.onTap});
+  const _TimeBox({required this.label, required this.time, required this.onTap, this.enabled = true});
   final String label;
   final TimeOfDay time;
   final VoidCallback onTap;
+  final bool enabled;
+
   @override
-  Widget build(BuildContext context) => InkWell(onTap: onTap, borderRadius: BorderRadius.circular(14), child: InputDecorator(decoration: InputDecoration(labelText: label), child: Text(_time(time))));
+  Widget build(BuildContext context) => InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: InputDecorator(
+          isEmpty: false,
+          decoration: InputDecoration(labelText: label, enabled: enabled),
+          child: Text(_time(time)),
+        ),
+      );
 }
