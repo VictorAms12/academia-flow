@@ -183,6 +183,11 @@ class AppDatabase {
     }
     if (oldVersion < 5) {
       await db.execute('ALTER TABLE tasks ADD COLUMN completed_at TEXT');
+      await db.execute(
+        'UPDATE tasks SET completed_at = due_date WHERE status = ? AND completed_at IS NULL',
+        [TaskStatus.done.index],
+      );
+      await _createIndexes(db);
     }
   }
 
@@ -283,6 +288,11 @@ class AppDatabase {
 
   Future<List<ClassSession>> getClassSessions() async =>
       (await (await database).query('class_sessions', orderBy: 'date ASC, start_time ASC')).map(ClassSession.fromMap).toList();
+
+  Future<ClassSession?> getClassSession(int id) async {
+    final rows = await (await database).query('class_sessions', where: 'id = ?', whereArgs: [id], limit: 1);
+    return rows.isEmpty ? null : ClassSession.fromMap(rows.first);
+  }
 
   Future<ClassSession> saveClassSession(ClassSession item) async {
     final db = await database;

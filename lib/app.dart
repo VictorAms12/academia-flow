@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'screens/onboarding_screen.dart';
+import 'services/background_routine_sync.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_shell.dart';
@@ -14,15 +17,18 @@ class AcademiaFlowApp extends StatefulWidget {
   State<AcademiaFlowApp> createState() => _AcademiaFlowAppState();
 }
 
-class _AcademiaFlowAppState extends State<AcademiaFlowApp> {
+class _AcademiaFlowAppState extends State<AcademiaFlowApp> with WidgetsBindingObserver {
   late bool _dark;
   late bool _onboardingComplete;
+  bool _syncingBackgroundAction = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _captureRootState();
     widget.state.addListener(_handleStateChange);
+    unawaited(_syncBackgroundRoutineAction());
   }
 
   @override
@@ -32,10 +38,32 @@ class _AcademiaFlowAppState extends State<AcademiaFlowApp> {
     oldWidget.state.removeListener(_handleStateChange);
     _captureRootState();
     widget.state.addListener(_handleStateChange);
+    unawaited(_syncBackgroundRoutineAction());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_syncBackgroundRoutineAction());
+    }
+  }
+
+  Future<void> _syncBackgroundRoutineAction() async {
+    if (_syncingBackgroundAction) return;
+    _syncingBackgroundAction = true;
+    try {
+      final changed = await BackgroundRoutineSync.instance.consumePendingChange();
+      if (changed) await widget.state.reloadAll();
+    } catch (_) {
+      // A sincronização é corretiva e não deve impedir o app de continuar aberto.
+    } finally {
+      _syncingBackgroundAction = false;
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.state.removeListener(_handleStateChange);
     super.dispose();
   }

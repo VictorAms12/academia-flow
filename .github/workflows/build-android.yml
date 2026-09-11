@@ -44,20 +44,17 @@ jobs:
       - name: Generate Android project files
         run: flutter create . --platforms=android
 
-      - name: Prepare Android signing
+      - name: Prepare persistent release signing
         shell: bash
         run: |
-          if [[ -n "$ACADEMIA_FLOW_KEYSTORE_B64" && -n "$ACADEMIA_FLOW_STORE_PASSWORD" && -n "$ACADEMIA_FLOW_KEY_PASSWORD" ]]; then
-            printf '%s' "$ACADEMIA_FLOW_KEYSTORE_B64" | base64 --decode > android/app/academia-flow-upload.jks
-            echo "ACADEMIA_FLOW_RELEASE_SIGNING=true" >> "$GITHUB_ENV"
-            echo "Assinatura release carregada a partir de GitHub Actions Secrets."
-          else
-            echo "ACADEMIA_FLOW_RELEASE_SIGNING=false" >> "$GITHUB_ENV"
-            echo "::warning::Secrets de assinatura não configurados. O CI gerará um APK release instalável usando a assinatura de desenvolvimento criada pelo Flutter. Para releases atualizáveis, configure ACADEMIA_FLOW_KEYSTORE_B64, ACADEMIA_FLOW_STORE_PASSWORD e ACADEMIA_FLOW_KEY_PASSWORD."
+          if [[ -z "$ACADEMIA_FLOW_KEYSTORE_B64" || -z "$ACADEMIA_FLOW_STORE_PASSWORD" || -z "$ACADEMIA_FLOW_KEY_PASSWORD" ]]; then
+            echo "::error::A assinatura persistente do Academia Flow não está configurada. A build foi interrompida para evitar um APK incompatível com a instalação existente."
+            exit 1
           fi
+          printf '%s' "$ACADEMIA_FLOW_KEYSTORE_B64" | base64 --decode > android/app/academia-flow-upload.jks
+          echo "ACADEMIA_FLOW_RELEASE_SIGNING=true" >> "$GITHUB_ENV"
 
-      - name: Validate release signing key
-        if: env.ACADEMIA_FLOW_RELEASE_SIGNING == 'true'
+      - name: Validate persistent signing key
         run: |
           keytool -list \
             -keystore android/app/academia-flow-upload.jks \
