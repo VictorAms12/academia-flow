@@ -42,8 +42,21 @@ class _RoutineScreenState extends State<RoutineScreen> {
               title: 'Rotina Acadêmica',
               subtitle: 'Aulas, presença, calendário, frequência e hábitos em um só fluxo.',
               action: Wrap(spacing: 8, children: [
-                IconButton.filledTonal(tooltip: 'Automação', onPressed: () => showRoutineSettings(context, state), icon: const Icon(Icons.tune_rounded)),
-                FilledButton.icon(onPressed: state.subjects.isEmpty ? null : () => showExtraClassEditor(context, state), icon: const Icon(Icons.add_rounded), label: const Text('Aula extra')),
+                IconButton.filledTonal(
+                  tooltip: 'Automação',
+                  onPressed: () => showRoutineSettings(context, state),
+                  icon: const Icon(Icons.tune_rounded),
+                ),
+                FilledButton.icon(
+                  onPressed: state.subjects.isEmpty
+                      ? null
+                      : () async {
+                          final saved = await showExtraClassEditor(context, state);
+                          if (saved != null && mounted) setState(() => tab = 3);
+                        },
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Aula extra'),
+                ),
               ]),
             ),
             const SizedBox(height: 15),
@@ -59,7 +72,7 @@ class _RoutineScreenState extends State<RoutineScreen> {
                 ],
                 selected: {tab},
                 showSelectedIcon: false,
-                onSelectionChanged: (v) => setState(() => tab = v.first),
+                onSelectionChanged: (value) => setState(() => tab = value.first),
               ),
             ),
             const SizedBox(height: 16),
@@ -114,11 +127,19 @@ class _TodayTab extends StatelessWidget {
         ),
       if (state.dueToday.isNotEmpty) ...[
         const SizedBox(height: 14),
-        SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const SectionTitle('Entregas de hoje'),
-          const SizedBox(height: 8),
-          for (final task in state.dueToday) ListTile(contentPadding: EdgeInsets.zero, leading: const Icon(Icons.assignment_rounded), title: Text(task.title), subtitle: Text(state.subjectName(task.subjectId))),
-        ])),
+        SoftCard(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SectionTitle('Entregas de hoje'),
+            const SizedBox(height: 8),
+            for (final task in state.dueToday)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.assignment_rounded),
+                title: Text(task.title),
+                subtitle: Text(state.subjectName(task.subjectId)),
+              ),
+          ]),
+        ),
       ],
     ]);
   }
@@ -151,43 +172,57 @@ class _AttendanceBadge extends StatelessWidget {
 class _AttendanceTab extends StatelessWidget {
   const _AttendanceTab({required this.state});
   final AppState state;
+
   @override
   Widget build(BuildContext context) {
-    if (state.subjects.isEmpty) return const EmptyState(icon: Icons.how_to_reg_rounded, title: 'Sem matérias', message: 'Cadastre matérias para acompanhar frequência.');
+    if (state.subjects.isEmpty) {
+      return const EmptyState(
+        icon: Icons.how_to_reg_rounded,
+        title: 'Sem matérias',
+        message: 'Cadastre matérias para acompanhar frequência.',
+      );
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (state.pendingAttendance.isNotEmpty) ...[
-        SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const SectionTitle('Presenças pendentes'),
-          const SizedBox(height: 8),
-          for (final session in state.pendingAttendance.take(8))
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(state.subjectName(session.subjectId), style: const TextStyle(fontWeight: FontWeight.w900)),
-              subtitle: Text('${formatRoutineDate(session.date)} • ${session.start}–${session.end}'),
-              trailing: Wrap(spacing: 4, children: [
-                IconButton.filledTonal(
-                  tooltip: 'Presente',
-                  onPressed: () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.present),
-                  icon: const Icon(Icons.check_rounded),
-                ),
-                IconButton.filledTonal(
-                  tooltip: 'Faltei',
-                  onPressed: () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.absent),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ]),
-            ),
-        ])),
+        SoftCard(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const SectionTitle('Presenças pendentes'),
+            const SizedBox(height: 8),
+            for (final session in state.pendingAttendance.take(8))
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(state.subjectName(session.subjectId), style: const TextStyle(fontWeight: FontWeight.w900)),
+                subtitle: Text('${formatRoutineDate(session.date)} • ${session.start}–${session.end}'),
+                trailing: Wrap(spacing: 4, children: [
+                  IconButton.filledTonal(
+                    tooltip: 'Presente',
+                    onPressed: () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.present),
+                    icon: const Icon(Icons.check_rounded),
+                  ),
+                  IconButton.filledTonal(
+                    tooltip: 'Faltei',
+                    onPressed: () => markAttendanceWithFeedback(context, state, session, AttendanceStatus.absent),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ]),
+              ),
+          ]),
+        ),
         const SizedBox(height: 14),
       ],
-      LayoutBuilder(builder: (context, c) {
-        final cols = c.maxWidth >= 900 ? 3 : c.maxWidth >= 590 ? 2 : 1;
+      LayoutBuilder(builder: (context, constraints) {
+        final cols = constraints.maxWidth >= 900 ? 3 : constraints.maxWidth >= 590 ? 2 : 1;
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: state.subjects.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: cols == 1 ? 1.7 : 1.22),
-          itemBuilder: (_, i) => _AttendanceCard(state: state, subject: state.subjects[i]),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: cols == 1 ? 1.7 : 1.22,
+          ),
+          itemBuilder: (_, index) => _AttendanceCard(state: state, subject: state.subjects[index]),
         );
       }),
       const SizedBox(height: 16),
@@ -200,63 +235,107 @@ class _AttendanceCard extends StatelessWidget {
   const _AttendanceCard({required this.state, required this.subject});
   final AppState state;
   final Subject subject;
+
   @override
   Widget build(BuildContext context) {
     final attendance = state.attendanceForSubject(subject);
     final target = state.attendanceTarget(subject);
     final remaining = state.remainingAbsences(subject);
     final risk = state.attendanceRiskLabel(subject);
-    final riskColor = switch (risk) { 'SEGURO' => AppColors.success, 'ATENÇÃO' => AppColors.gold, 'RISCO' => Colors.orange, _ => AppColors.danger };
-    return SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Expanded(child: Text(subject.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16))), Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: riskColor.withValues(alpha: .11), borderRadius: BorderRadius.circular(20)), child: Text(risk, style: TextStyle(color: riskColor, fontSize: 9, fontWeight: FontWeight.w900)))]),
-      const SizedBox(height: 12),
-      Text('${attendance.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
-      Text('meta ${target.toStringAsFixed(0)}% • ${state.completedClassCount(subject)} aulas registradas', style: Theme.of(context).textTheme.bodySmall),
-      const SizedBox(height: 8),
-      LinearProgressIndicator(value: (attendance / 100).clamp(0, 1), minHeight: 7, borderRadius: BorderRadius.circular(20)),
-      const Spacer(),
-      Text(remaining >= 9999 ? 'Defina o total planejado para calcular faltas restantes.' : 'Você ainda pode faltar $remaining aula${remaining == 1 ? '' : 's'}.', style: Theme.of(context).textTheme.bodySmall),
-      const SizedBox(height: 9),
-      Wrap(spacing: 6, runSpacing: 6, children: [
-        TextButton.icon(onPressed: () => showAbsenceSimulator(context, state, subject), icon: const Icon(Icons.science_outlined), label: const Text('Simular')),
-        TextButton.icon(onPressed: () => showAttendanceTargetEditor(context, state, subject), icon: const Icon(Icons.flag_outlined), label: const Text('Meta')),
+    final riskColor = switch (risk) {
+      'SEGURO' => AppColors.success,
+      'ATENÇÃO' => AppColors.gold,
+      'RISCO' => Colors.orange,
+      _ => AppColors.danger,
+    };
+    return SoftCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Text(
+              subject.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: riskColor.withValues(alpha: .11), borderRadius: BorderRadius.circular(20)),
+            child: Text(risk, style: TextStyle(color: riskColor, fontSize: 9, fontWeight: FontWeight.w900)),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        Text('${attendance.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+        Text('meta ${target.toStringAsFixed(0)}% • ${state.completedClassCount(subject)} aulas registradas', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 8),
+        LinearProgressIndicator(value: (attendance / 100).clamp(0, 1), minHeight: 7, borderRadius: BorderRadius.circular(20)),
+        const Spacer(),
+        Text(
+          remaining >= 9999
+              ? 'Defina o total planejado para calcular faltas restantes.'
+              : 'Você ainda pode faltar $remaining aula${remaining == 1 ? '' : 's'}.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 9),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          TextButton.icon(
+            onPressed: () => showAbsenceSimulator(context, state, subject),
+            icon: const Icon(Icons.science_outlined),
+            label: const Text('Simular'),
+          ),
+          TextButton.icon(
+            onPressed: () => showAttendanceTargetEditor(context, state, subject),
+            icon: const Icon(Icons.flag_outlined),
+            label: const Text('Meta'),
+          ),
+        ]),
       ]),
-    ]));
+    );
   }
 }
 
 class _AttendanceHistory extends StatelessWidget {
   const _AttendanceHistory({required this.state});
   final AppState state;
+
   @override
   Widget build(BuildContext context) {
-    final history = state.classSessions.where((s) => s.status != AttendanceStatus.pending).toList()..sort((a, b) => b.startsAt.compareTo(a.startsAt));
-    return SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const SectionTitle('Histórico recente'),
-      const SizedBox(height: 8),
-      if (history.isEmpty) Text('As presenças confirmadas aparecerão aqui.', style: Theme.of(context).textTheme.bodySmall),
-      for (final session in history.take(12))
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          onTap: session.id == null ? null : () => Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: session.id!))),
-          leading: Icon(_attendanceIcon(session.status), color: _attendanceColor(session.status)),
-          title: Text(state.subjectName(session.subjectId), style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text('${formatRoutineDate(session.date)} • ${session.classCount} aula${session.classCount == 1 ? '' : 's'}'),
-          trailing: Text(_attendanceText(session.status), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-        ),
-    ]));
+    final history = state.classSessions.where((session) => session.status != AttendanceStatus.pending).toList()
+      ..sort((a, b) => b.startsAt.compareTo(a.startsAt));
+    return SoftCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const SectionTitle('Histórico recente'),
+        const SizedBox(height: 8),
+        if (history.isEmpty) Text('As presenças confirmadas aparecerão aqui.', style: Theme.of(context).textTheme.bodySmall),
+        for (final session in history.take(12))
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            onTap: session.id == null ? null : () => Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: session.id!))),
+            leading: Icon(_attendanceIcon(session.status), color: _attendanceColor(session.status)),
+            title: Text(state.subjectName(session.subjectId), style: const TextStyle(fontWeight: FontWeight.w800)),
+            subtitle: Text('${formatRoutineDate(session.date)} • ${session.classCount} aula${session.classCount == 1 ? '' : 's'}'),
+            trailing: Text(_attendanceText(session.status), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+          ),
+      ]),
+    );
   }
 }
 
 class _WeekTab extends StatelessWidget {
   const _WeekTab({required this.state});
   final AppState state;
+
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Expanded(child: Text('Grade semanal', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900))),
-        FilledButton.tonalIcon(onPressed: state.subjects.isEmpty ? null : () => showScheduleEditor(context, state), icon: const Icon(Icons.add_rounded), label: const Text('Horário')),
+        FilledButton.tonalIcon(
+          onPressed: state.subjects.isEmpty ? null : () => showScheduleEditor(context, state),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Horário'),
+        ),
       ]),
       const SizedBox(height: 12),
       for (var day = 1; day <= 7; day++) _DayBlock(state: state, day: day),
@@ -268,34 +347,48 @@ class _DayBlock extends StatelessWidget {
   const _DayBlock({required this.state, required this.day});
   final AppState state;
   final int day;
+
   @override
   Widget build(BuildContext context) {
-    final entries = state.schedules.where((e) => e.day == day).toList()..sort((a, b) => a.start.compareTo(b.start));
+    final entries = state.schedules.where((entry) => entry.day == day).toList()..sort((a, b) => a.start.compareTo(b.start));
     if (entries.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SectionTitle(dayName(day)),
-        const SizedBox(height: 9),
-        for (final entry in entries)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: InkWell(
-              onTap: () => showScheduleRoutineConfig(context, state, entry),
-              borderRadius: BorderRadius.circular(13),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: .06), borderRadius: BorderRadius.circular(13)),
-                child: Row(children: [
-                  SizedBox(width: 92, child: Text('${entry.start}–${entry.end}', style: const TextStyle(fontWeight: FontWeight.w900))),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(state.subjectName(entry.subjectId), style: const TextStyle(fontWeight: FontWeight.w900)), Text('${entry.classCount} aula${entry.classCount == 1 ? '' : 's'} • lembrete ${entry.reminderMinutes} min${entry.room.isEmpty ? '' : ' • ${entry.room}'}', style: Theme.of(context).textTheme.bodySmall)])),
-                  const Icon(Icons.tune_rounded, size: 19),
-                ]),
+      child: SoftCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SectionTitle(dayName(day)),
+          const SizedBox(height: 9),
+          for (final entry in entries)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: InkWell(
+                onTap: () => showScheduleRoutineConfig(context, state, entry),
+                borderRadius: BorderRadius.circular(13),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: .06),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Row(children: [
+                    SizedBox(width: 92, child: Text('${entry.start}–${entry.end}', style: const TextStyle(fontWeight: FontWeight.w900))),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(state.subjectName(entry.subjectId), style: const TextStyle(fontWeight: FontWeight.w900)),
+                        Text(
+                          '${entry.classCount} aula${entry.classCount == 1 ? '' : 's'} • lembrete ${entry.reminderMinutes} min${entry.room.isEmpty ? '' : ' • ${entry.room}'}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ]),
+                    ),
+                    const Icon(Icons.tune_rounded, size: 19),
+                  ]),
+                ),
               ),
             ),
-          ),
-      ])),
+        ]),
+      ),
     );
   }
 }
@@ -303,61 +396,224 @@ class _DayBlock extends StatelessWidget {
 class _CalendarTab extends StatelessWidget {
   const _CalendarTab({required this.state});
   final AppState state;
+
   @override
   Widget build(BuildContext context) {
     final events = [...state.calendarEvents]..sort((a, b) => a.date.compareTo(b.date));
+    final specialClasses = state.classSessions.where((session) => session.kind != ClassSessionKind.regular).toList()
+      ..sort(_compareSpecialClasses);
+
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 8, runSpacing: 8, children: [
-        FilledButton.icon(onPressed: () => showCalendarEventEditor(context, state), icon: const Icon(Icons.event_rounded), label: const Text('Evento / feriado')),
-        FilledButton.tonalIcon(onPressed: state.subjects.isEmpty ? null : () => showExtraClassEditor(context, state), icon: const Icon(Icons.add_circle_outline_rounded), label: const Text('Aula extra')),
-        FilledButton.tonalIcon(onPressed: state.subjects.isEmpty ? null : () => showExtraClassEditor(context, state, kind: ClassSessionKind.makeup), icon: const Icon(Icons.replay_rounded), label: const Text('Reposição')),
+        FilledButton.icon(
+          onPressed: () => showCalendarEventEditor(context, state),
+          icon: const Icon(Icons.event_rounded),
+          label: const Text('Evento / feriado'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: state.subjects.isEmpty ? null : () => showExtraClassEditor(context, state),
+          icon: const Icon(Icons.add_circle_outline_rounded),
+          label: const Text('Aula extra'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: state.subjects.isEmpty ? null : () => showExtraClassEditor(context, state, kind: ClassSessionKind.makeup),
+          icon: const Icon(Icons.replay_rounded),
+          label: const Text('Reposição'),
+        ),
       ]),
       const SizedBox(height: 14),
-      SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const SectionTitle('Calendário acadêmico'),
-        const SizedBox(height: 8),
-        if (events.isEmpty) Text('Cadastre feriados, recessos, cancelamentos e semanas de avaliação.', style: Theme.of(context).textTheme.bodySmall),
-        for (final event in events.take(20))
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(_eventIcon(event.kind)),
-            title: Text(event.title, style: const TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text('${formatRoutineDate(event.date)}${event.subjectId == null ? '' : ' • ${state.subjectName(event.subjectId)}'}${event.blocksClasses ? ' • sem aula' : ''}'),
-            trailing: PopupMenuButton<String>(onSelected: (v) async { if (v == 'edit') await showCalendarEventEditor(context, state, event: event); if (v == 'delete') await state.deleteCalendarEvent(event); }, itemBuilder: (_) => const [PopupMenuItem(value: 'edit', child: Text('Editar')), PopupMenuItem(value: 'delete', child: Text('Excluir'))]),
+      SoftCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const SectionTitle('Aulas extras e reposições'),
+          const SizedBox(height: 4),
+          Text(
+            'Ocorrências fora da grade semanal ficam reunidas aqui e continuam contando normalmente na rotina e frequência.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-      ])),
+          const SizedBox(height: 8),
+          if (specialClasses.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text('Nenhuma aula extra ou reposição cadastrada.', style: Theme.of(context).textTheme.bodySmall),
+            ),
+          for (final session in specialClasses.take(30)) _specialClassTile(context, session),
+        ]),
+      ),
+      const SizedBox(height: 14),
+      SoftCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const SectionTitle('Calendário acadêmico'),
+          const SizedBox(height: 8),
+          if (events.isEmpty)
+            Text('Cadastre feriados, recessos, cancelamentos e semanas de avaliação.', style: Theme.of(context).textTheme.bodySmall),
+          for (final event in events.take(20))
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(_eventIcon(event.kind)),
+              title: Text(event.title, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text(
+                '${formatRoutineDate(event.date)}${event.subjectId == null ? '' : ' • ${state.subjectName(event.subjectId)}'}${event.blocksClasses ? ' • sem aula' : ''}',
+              ),
+              trailing: PopupMenuButton<String>(
+                onSelected: (value) async {
+                  if (value == 'edit') await showCalendarEventEditor(context, state, event: event);
+                  if (value == 'delete') await state.deleteCalendarEvent(event);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'edit', child: Text('Editar')),
+                  PopupMenuItem(value: 'delete', child: Text('Excluir')),
+                ],
+              ),
+            ),
+        ]),
+      ),
     ]);
+  }
+
+  Widget _specialClassTile(BuildContext context, ClassSession session) {
+    final linked = state.sessionById(session.makeupForSessionId);
+    final statusSuffix = session.status == AttendanceStatus.pending ? '' : ' • ${_attendanceText(session.status)}';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: session.id == null ? null : () => Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: session.id!))),
+      leading: CircleAvatar(
+        backgroundColor: AppColors.gold.withValues(alpha: .10),
+        child: Icon(_specialClassIcon(session.kind), color: AppColors.gold),
+      ),
+      title: Row(children: [
+        Expanded(child: Text(state.subjectName(session.subjectId), style: const TextStyle(fontWeight: FontWeight.w900))),
+        const SizedBox(width: 8),
+        GoldBadge(_specialClassLabel(session.kind).toUpperCase()),
+      ]),
+      subtitle: Text(
+        '${formatRoutineDate(session.date)} • ${session.start}–${session.end} • ${session.classCount} aula${session.classCount == 1 ? '' : 's'}${session.room.isEmpty ? '' : ' • ${session.room}'}$statusSuffix'
+        '${linked == null ? '' : '\nVinculada à aula cancelada de ${formatRoutineDate(linked.date)}'}'
+        '${session.note.isEmpty ? '' : '\n${session.note}'}',
+        maxLines: 4,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) async {
+          if (value == 'open' && session.id != null) {
+            await Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: session.id!)));
+          }
+          if (value == 'edit') {
+            await showExtraClassEditor(
+              context,
+              state,
+              kind: session.kind,
+              makeupFor: linked,
+              existing: session,
+            );
+          }
+          if (value == 'delete') await _deleteSpecialClass(context, session);
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'open', child: Text('Abrir aula')),
+          PopupMenuItem(value: 'edit', child: Text('Editar')),
+          PopupMenuDivider(),
+          PopupMenuItem(value: 'delete', child: Text('Excluir')),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteSpecialClass(BuildContext context, ClassSession session) async {
+    final label = _specialClassLabel(session.kind).toLowerCase();
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text('Excluir $label?'),
+            content: Text('${state.subjectName(session.subjectId)} • ${formatRoutineDate(session.date)} às ${session.start}. A ocorrência será removida da rotina.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Theme.of(dialogContext).colorScheme.error),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Excluir'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+    await state.deleteClassSession(session);
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(content: Text('${_specialClassLabel(session.kind)} excluída.'), behavior: SnackBarBehavior.floating));
   }
 }
 
 class _InsightsTab extends StatelessWidget {
   const _InsightsTab({required this.state});
   final AppState state;
+
   @override
   Widget build(BuildContext context) {
     final week = state.weeklyAttendanceSummary;
-    final resolved = state.classSessions.where((s) => s.status == AttendanceStatus.present || s.status == AttendanceStatus.absent).fold<int>(0, (v, s) => v + s.classCount);
-    final present = state.classSessions.where((s) => s.status == AttendanceStatus.present).fold<int>(0, (v, s) => v + s.classCount);
+    final resolved = state.classSessions
+        .where((session) => session.status == AttendanceStatus.present || session.status == AttendanceStatus.absent)
+        .fold<int>(0, (value, session) => value + session.classCount);
+    final present = state.classSessions
+        .where((session) => session.status == AttendanceStatus.present)
+        .fold<int>(0, (value, session) => value + session.classCount);
     final overall = resolved == 0 ? 100.0 : present / resolved * 100;
     return Column(children: [
-      LayoutBuilder(builder: (context, c) {
+      LayoutBuilder(builder: (context, constraints) {
         final cards = [
-          _InsightCard(icon: Icons.calendar_view_week_rounded, title: 'Esta semana', value: '${week['present'] ?? 0}/${week['classes'] ?? 0}', subtitle: '${week['absent'] ?? 0} faltas • ${week['pending'] ?? 0} pendentes'),
-          _InsightCard(icon: Icons.how_to_reg_rounded, title: 'Presença geral', value: '${overall.toStringAsFixed(1)}%', subtitle: '$resolved aulas confirmadas'),
-          _InsightCard(icon: Icons.task_alt_rounded, title: 'Atividades concluídas', value: '${state.onTimeTaskRate.toStringAsFixed(0)}%', subtitle: '${state.completedCount}/${state.tasks.length} concluídas'),
-          if (state.streakEnabled) _InsightCard(icon: Icons.local_fire_department_rounded, title: 'Sequência', value: '${state.attendanceStreak}', subtitle: 'aulas consecutivas presentes'),
+          _InsightCard(
+            icon: Icons.calendar_view_week_rounded,
+            title: 'Esta semana',
+            value: '${week['present'] ?? 0}/${week['classes'] ?? 0}',
+            subtitle: '${week['absent'] ?? 0} faltas • ${week['pending'] ?? 0} pendentes',
+          ),
+          _InsightCard(
+            icon: Icons.how_to_reg_rounded,
+            title: 'Presença geral',
+            value: '${overall.toStringAsFixed(1)}%',
+            subtitle: '$resolved aulas confirmadas',
+          ),
+          _InsightCard(
+            icon: Icons.task_alt_rounded,
+            title: 'Atividades concluídas',
+            value: '${state.onTimeTaskRate.toStringAsFixed(0)}%',
+            subtitle: '${state.completedCount}/${state.tasks.length} concluídas',
+          ),
+          if (state.streakEnabled)
+            _InsightCard(
+              icon: Icons.local_fire_department_rounded,
+              title: 'Sequência',
+              value: '${state.attendanceStreak}',
+              subtitle: 'aulas consecutivas presentes',
+            ),
         ];
-        final cols = c.maxWidth >= 900 ? 4 : c.maxWidth >= 600 ? 2 : 1;
-        return GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: cards.length, gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, crossAxisSpacing: 11, mainAxisSpacing: 11, childAspectRatio: cols == 1 ? 2.3 : 1.35), itemBuilder: (_, i) => cards[i]);
+        final cols = constraints.maxWidth >= 900 ? 4 : constraints.maxWidth >= 600 ? 2 : 1;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: cards.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            crossAxisSpacing: 11,
+            mainAxisSpacing: 11,
+            childAspectRatio: cols == 1 ? 2.3 : 1.35,
+          ),
+          itemBuilder: (_, index) => cards[index],
+        );
       }),
       const SizedBox(height: 14),
-      SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const SectionTitle('Resumo semanal'),
-        const SizedBox(height: 8),
-        Text('Você teve ${week['classes'] ?? 0} aulas contabilizadas nesta semana: ${week['present'] ?? 0} presenças, ${week['absent'] ?? 0} faltas e ${week['pending'] ?? 0} confirmações pendentes.'),
-        const SizedBox(height: 8),
-        Text('No app, o resumo é recalculado automaticamente com base nas ocorrências reais de aula.', style: Theme.of(context).textTheme.bodySmall),
-      ])),
+      SoftCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const SectionTitle('Resumo semanal'),
+          const SizedBox(height: 8),
+          Text(
+            'Você teve ${week['classes'] ?? 0} aulas contabilizadas nesta semana: ${week['present'] ?? 0} presenças, ${week['absent'] ?? 0} faltas e ${week['pending'] ?? 0} confirmações pendentes.',
+          ),
+          const SizedBox(height: 8),
+          Text('No app, o resumo é recalculado automaticamente com base nas ocorrências reais de aula.', style: Theme.of(context).textTheme.bodySmall),
+        ]),
+      ),
     ]);
   }
 }
@@ -368,11 +624,64 @@ class _InsightCard extends StatelessWidget {
   final String title;
   final String value;
   final String subtitle;
+
   @override
-  Widget build(BuildContext context) => SoftCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, color: AppColors.gold), const Spacer(), Text(title, style: Theme.of(context).textTheme.bodySmall), Text(value, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900)), Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall)]));
+  Widget build(BuildContext context) => SoftCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, color: AppColors.gold),
+          const Spacer(),
+          Text(title, style: Theme.of(context).textTheme.bodySmall),
+          Text(value, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+          Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall),
+        ]),
+      );
 }
 
-IconData _attendanceIcon(AttendanceStatus status) => switch (status) { AttendanceStatus.present => Icons.check_circle_rounded, AttendanceStatus.absent => Icons.cancel_rounded, AttendanceStatus.cancelled => Icons.event_busy_rounded, AttendanceStatus.pending => Icons.help_rounded };
-Color _attendanceColor(AttendanceStatus status) => switch (status) { AttendanceStatus.present => AppColors.success, AttendanceStatus.absent => AppColors.danger, AttendanceStatus.cancelled => Colors.grey, AttendanceStatus.pending => AppColors.gold };
-String _attendanceText(AttendanceStatus status) => switch (status) { AttendanceStatus.present => 'Presente', AttendanceStatus.absent => 'Falta', AttendanceStatus.cancelled => 'Cancelada', AttendanceStatus.pending => 'Pendente' };
-IconData _eventIcon(AcademicEventKind kind) => switch (kind) { AcademicEventKind.holiday => Icons.celebration_rounded, AcademicEventKind.recess => Icons.beach_access_rounded, AcademicEventKind.cancellation => Icons.event_busy_rounded, AcademicEventKind.examWeek => Icons.quiz_rounded, AcademicEventKind.academicEvent => Icons.school_rounded };
+int _compareSpecialClasses(ClassSession a, ClassSession b) {
+  final now = DateTime.now();
+  final aPast = a.endsAt.isBefore(now);
+  final bPast = b.endsAt.isBefore(now);
+  if (aPast != bPast) return aPast ? 1 : -1;
+  return aPast ? b.startsAt.compareTo(a.startsAt) : a.startsAt.compareTo(b.startsAt);
+}
+
+String _specialClassLabel(ClassSessionKind kind) => switch (kind) {
+      ClassSessionKind.makeup => 'Reposição',
+      ClassSessionKind.extra => 'Aula extra',
+      ClassSessionKind.regular => 'Aula',
+    };
+
+IconData _specialClassIcon(ClassSessionKind kind) => switch (kind) {
+      ClassSessionKind.makeup => Icons.replay_rounded,
+      ClassSessionKind.extra => Icons.add_circle_outline_rounded,
+      ClassSessionKind.regular => Icons.school_outlined,
+    };
+
+IconData _attendanceIcon(AttendanceStatus status) => switch (status) {
+      AttendanceStatus.present => Icons.check_circle_rounded,
+      AttendanceStatus.absent => Icons.cancel_rounded,
+      AttendanceStatus.cancelled => Icons.event_busy_rounded,
+      AttendanceStatus.pending => Icons.help_rounded,
+    };
+
+Color _attendanceColor(AttendanceStatus status) => switch (status) {
+      AttendanceStatus.present => AppColors.success,
+      AttendanceStatus.absent => AppColors.danger,
+      AttendanceStatus.cancelled => Colors.grey,
+      AttendanceStatus.pending => AppColors.gold,
+    };
+
+String _attendanceText(AttendanceStatus status) => switch (status) {
+      AttendanceStatus.present => 'Presente',
+      AttendanceStatus.absent => 'Falta',
+      AttendanceStatus.cancelled => 'Cancelada',
+      AttendanceStatus.pending => 'Pendente',
+    };
+
+IconData _eventIcon(AcademicEventKind kind) => switch (kind) {
+      AcademicEventKind.holiday => Icons.celebration_rounded,
+      AcademicEventKind.recess => Icons.beach_access_rounded,
+      AcademicEventKind.cancellation => Icons.event_busy_rounded,
+      AcademicEventKind.examWeek => Icons.quiz_rounded,
+      AcademicEventKind.academicEvent => Icons.school_rounded,
+    };
