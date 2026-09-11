@@ -1,15 +1,59 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart' as fln;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import '../data/app_database.dart';
 import '../models/models.dart';
+
+@pragma('vm:entry-point')
+Future<void> notificationTapBackground(fln.NotificationResponse response) async {
+  final actionId = response.actionId ?? '';
+  final payload = response.payload ?? '';
+  if (!actionId.startsWith('routine_') || !payload.startsWith('session:')) return;
+
+  final sessionId = int.tryParse(payload.substring('session:'.length));
+  final status = switch (actionId) {
+    'routine_present' => AttendanceStatus.present,
+    'routine_absent' => AttendanceStatus.absent,
+    'routine_cancelled' => AttendanceStatus.cancelled,
+    _ => null,
+  };
+  if (sessionId == null || status == null) return;
+
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final db = AppDatabase.instance;
+    final session = await db.getClassSession(sessionId);
+    if (session == null) return;
+
+    await db.saveClassSession(session.copyWith(status: status));
+    await db.setSetting(
+      NotificationService.backgroundRoutineActionKey,
+      DateTime.now().toIso8601String(),
+    );
+
+    // A ação cancela a notificação em que o botão foi tocado por padrão.
+    // Aqui também removemos os demais avisos pendentes da mesma aula para que,
+    // por exemplo, um check-in já confirmado não gere outro aviso no fim.
+    final plugin = fln.FlutterLocalNotificationsPlugin();
+    final base = 1000000 + sessionId * 10;
+    for (var i = 1; i <= 4; i++) {
+      await plugin.cancel(id: base + i);
+    }
+  } catch (_) {
+    // Ação de notificação nunca deve provocar crash do processo em background.
+  }
+}
 
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
+
+  static const backgroundRoutineActionKey = 'routine_background_action_at';
 
   final fln.FlutterLocalNotificationsPlugin _plugin = fln.FlutterLocalNotificationsPlugin();
   final ValueNotifier<String?> navigationPayload = ValueNotifier<String?>(null);
@@ -48,9 +92,24 @@ class NotificationService {
       importance: fln.Importance.max,
       priority: fln.Priority.max,
       actions: <fln.AndroidNotificationAction>[
-        fln.AndroidNotificationAction('routine_present', '✓ Presente', showsUserInterface: true),
-        fln.AndroidNotificationAction('routine_absent', 'Faltei', showsUserInterface: true),
-        fln.AndroidNotificationAction('routine_cancelled', 'Cancelada', showsUserInterface: true),
+        fln.AndroidNotificationAction(
+          'routine_present',
+          '✓ Presente',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+        fln.AndroidNotificationAction(
+          'routine_absent',
+          'Faltei',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
+        fln.AndroidNotificationAction(
+          'routine_cancelled',
+          'Cancelada',
+          showsUserInterface: false,
+          cancelNotification: true,
+        ),
       ],
     ),
   );
@@ -95,6 +154,7 @@ class NotificationService {
           android: fln.AndroidInitializationSettings('ic_stat_academia_flow'),
         ),
         onDidReceiveNotificationResponse: _handleResponse,
+        onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
       );
       _ready = true;
 
