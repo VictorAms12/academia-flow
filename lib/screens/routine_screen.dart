@@ -503,20 +503,24 @@ class _CalendarTab extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: PopupMenuButton<String>(
-        onSelected: (value) async {
+        onSelected: (value) {
           if (value == 'open' && session.id != null) {
-            await Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: session.id!)));
+            Navigator.push(context, motionRoute(ClassDetailScreen(sessionId: session.id!)));
+            return;
           }
           if (value == 'edit') {
-            await showExtraClassEditor(
+            showExtraClassEditor(
               context,
               state,
               kind: session.kind,
               makeupFor: linked,
               existing: session,
             );
+            return;
           }
-          if (value == 'delete') await _deleteSpecialClass(context, session);
+          if (value == 'delete') {
+            _deleteSpecialClass(context, session);
+          }
         },
         itemBuilder: (_) => const [
           PopupMenuItem(value: 'open', child: Text('Abrir aula')),
